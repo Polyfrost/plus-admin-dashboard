@@ -35,7 +35,7 @@ function RootRoute() {
                 navigate={(to, options) => router.navigate({ to, ...options })}
                 useHref={(to) => router.buildLocation({ to }).href}
             >
-                <div className="h-screen flex flex-col overflow-hidden text-fg-primary">
+                <div className="min-h-screen flex flex-col text-fg-primary">
                     <Outlet />
                 </div>
             </RouterProvider>
