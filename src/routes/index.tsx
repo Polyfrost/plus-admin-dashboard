@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { zipSync } from "fflate";
+import { useEnv, usePassword } from "@/lib/settings";
 
 export const Route = createFileRoute("/")({
     component: Dashboard,
@@ -99,8 +100,8 @@ async function buildBundle(files: File[]): Promise<Uint8Array> {
 }
 
 function Dashboard() {
-    const [password, setPassword] = useState("");
-    const [env, setEnv] = useState("http://127.0.0.1:8080");
+    const [password, setPassword] = usePassword();
+    const [env, setEnv] = useEnv();
     const [file, setFile] = useState<File | null>(null);
     const [folderFiles, setFolderFiles] = useState<File[]>([]);
     const [type, setType] = useState<UploadType>("cape");

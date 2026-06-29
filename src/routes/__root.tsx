@@ -1,5 +1,6 @@
 import {
     createRootRouteWithContext,
+    Link,
     Outlet,
     useRouter,
     type NavigateOptions,
@@ -36,6 +37,23 @@ function RootRoute() {
                 useHref={(to) => router.buildLocation({ to }).href}
             >
                 <div className="min-h-screen flex flex-col text-fg-primary">
+                    <nav className="flex items-center gap-4 px-6 py-3 bg-gray-900 border-b border-gray-800">
+                        <span className="font-bold text-gray-100">
+                            Plus Admin
+                        </span>
+                        <Link
+                            to="/"
+                            className="text-gray-400 hover:text-gray-100 [&.active]:text-[#61dafb]"
+                        >
+                            Dashboard
+                        </Link>
+                        <Link
+                            to="/analytics"
+                            className="text-gray-400 hover:text-gray-100 [&.active]:text-[#61dafb]"
+                        >
+                            Analytics
+                        </Link>
+                    </nav>
                     <Outlet />
                 </div>
             </RouterProvider>
