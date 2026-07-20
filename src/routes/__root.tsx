@@ -53,6 +53,12 @@ function RootRoute() {
                         >
                             Analytics
                         </Link>
+                        <Link
+                            to="/links"
+                            className="text-gray-400 hover:text-gray-100 [&.active]:text-[#61dafb]"
+                        >
+                            Links
+                        </Link>
                     </nav>
                     <Outlet />
                 </div>
