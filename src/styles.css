@@ -2,6 +2,8 @@
 
 body {
   @apply m-0;
+  color-scheme: dark;
+  background-color: var(--color-gray-950);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
     "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
     sans-serif;

@@ -23,6 +23,7 @@
         "react": "^19.2.7",
         "react-aria-components": "^1.19.0",
         "react-dom": "^19.2.7",
+        "recharts": "^3.10.1",
         "skinview3d": "^3.4.2"
     },
     "devDependencies": {
