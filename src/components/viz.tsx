@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
+import { Download } from "lucide-react";
 import {
     Area,
     AreaChart,
@@ -14,6 +15,7 @@ import {
     YAxis,
 } from "recharts";
 import { formatCompact } from "@/lib/analytics";
+import { csvFilename, downloadCsv } from "@/lib/csv";
 
 /** Categorical slots, assigned in order and never cycled. */
 export const SERIES_COLORS = [
@@ -399,12 +401,54 @@ export interface TableData {
     rows: ReactNode[][];
 }
 
+/**
+ * The range the page is showing, so an exported file carries it in its name
+ * instead of every range overwriting the last download.
+ */
+const ExportScope = createContext<string | null>(null);
+
+export function ExportScopeProvider({
+    scope,
+    children,
+}: {
+    scope: string | null;
+    children: ReactNode;
+}) {
+    return (
+        <ExportScope.Provider value={scope}>{children}</ExportScope.Provider>
+    );
+}
+
+/** Downloads `data` as CSV, named after `title` and the current range. */
+export function CsvButton({
+    title,
+    data,
+}: {
+    title: string;
+    data: TableData;
+}) {
+    const scope = useContext(ExportScope);
+
+    return (
+        <button
+            type="button"
+            onClick={() => downloadCsv(csvFilename(title, scope), data)}
+            disabled={data.rows.length === 0}
+            title={`Download ${title} as CSV`}
+            className="flex items-center gap-1 rounded border border-gray-600 px-2 py-1 text-xs text-gray-400 hover:border-gray-500 hover:text-gray-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-gray-600 disabled:hover:text-gray-400"
+        >
+            <Download size={12} />
+            CSV
+        </button>
+    );
+}
+
 export function DataTable({
     data,
     maxHeight = "24rem",
 }: {
     data: TableData;
-    maxHeight?: string;
+    maxHeight?: string | undefined;
 }) {
     return (
         <div className="overflow-auto" style={{ maxHeight }}>
@@ -467,6 +511,7 @@ export function ChartCard({
     title,
     subtitle,
     table,
+    tableMaxHeight,
     actions,
     children,
     className = "",
@@ -474,6 +519,7 @@ export function ChartCard({
     title: string;
     subtitle?: ReactNode;
     table?: TableData;
+    tableMaxHeight?: string;
     actions?: ReactNode;
     children?: ReactNode;
     className?: string;
@@ -502,10 +548,17 @@ export function ChartCard({
                             {showTable ? "Chart" : "Table"}
                         </button>
                     )}
+                    {table && <CsvButton title={title} data={table} />}
                 </div>
             </div>
 
-            <div>{showTable && table ? <DataTable data={table} /> : children}</div>
+            <div>
+                {showTable && table ? (
+                    <DataTable data={table} maxHeight={tableMaxHeight} />
+                ) : (
+                    children
+                )}
+            </div>
         </div>
     );
 }

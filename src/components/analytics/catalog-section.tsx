@@ -1,5 +1,5 @@
 import type { UseQueryResult } from "@tanstack/react-query";
-import { Eye, Layers, ShoppingCart, TrendingUp } from "lucide-react";
+import { Eye, Gift, Layers, ShoppingCart, TrendingUp } from "lucide-react";
 import {
     formatNumber,
     formatRate,
@@ -8,13 +8,7 @@ import {
     type CatalogSort,
 } from "@/lib/analytics";
 import { rangeLabel } from "@/lib/analytics-range";
-import {
-    ChartCard,
-    DataTable,
-    HBarList,
-    Section,
-    StatTile,
-} from "@/components/viz";
+import { ChartCard, HBarList, Section, StatTile } from "@/components/viz";
 import { SectionBody, TileGrid } from "@/components/analytics/shared";
 
 const CATALOG_SORTS: { id: CatalogSort; label: string }[] = [
@@ -75,7 +69,7 @@ export function CatalogSection({
         <Section
             id="catalog"
             title="Cosmetic performance"
-            description="Views are only counted when a cosmetic is opened, so one seen in a list but never opened does not register. Conversion can exceed 100% for cosmetics acquired in a bundle without being opened first."
+            description="Views are only counted when a cosmetic is opened, so one seen in a list but never opened does not register. Conversion can exceed 100% for cosmetics acquired in a bundle without being opened first. Paid counts Stripe checkouts that charged money and free the ones that came to zero — a checkout only records its session total, so every cosmetic in a mixed basket counts as paid."
         >
             <SectionBody query={query} what="the catalog">
                 {(data, dimmed) => {
@@ -99,9 +93,16 @@ export function CatalogSection({
                             views: sum.views + entry.views,
                             acquisitions: sum.acquisitions + entry.acquisitions,
                             paid: sum.paid + entry.acquisitions_paid,
+                            free: sum.free + entry.acquisitions_free,
                             granted: sum.granted + entry.acquisitions_granted,
                         }),
-                        { views: 0, acquisitions: 0, paid: 0, granted: 0 },
+                        {
+                            views: 0,
+                            acquisitions: 0,
+                            paid: 0,
+                            free: 0,
+                            granted: 0,
+                        },
                     );
 
                     return (
@@ -123,9 +124,17 @@ export function CatalogSection({
                                 />
                                 <StatTile
                                     icon={<ShoppingCart size={16} />}
-                                    label="Acquisitions"
-                                    value={formatNumber(totals.acquisitions)}
-                                    sub={`${formatNumber(totals.paid)} paid · ${formatNumber(totals.granted)} granted`}
+                                    label="Paid acquisitions"
+                                    value={formatNumber(totals.paid)}
+                                    sub={`of ${formatNumber(totals.acquisitions)} acquisitions`}
+                                />
+                                <StatTile
+                                    icon={<Gift size={16} />}
+                                    label="Free acquisitions"
+                                    value={formatNumber(
+                                        totals.free + totals.granted,
+                                    )}
+                                    sub={`${formatNumber(totals.free)} zero-priced · ${formatNumber(totals.granted)} granted`}
                                 />
                                 <StatTile
                                     icon={<TrendingUp size={16} />}
@@ -145,6 +154,22 @@ export function CatalogSection({
                             <ChartCard
                                 title={`Top 10 by ${metricLabel}`}
                                 actions={controls}
+                                table={{
+                                    columns: [
+                                        "Cosmetic",
+                                        metricLabel.replace(/^./, (first) =>
+                                            first.toUpperCase(),
+                                        ),
+                                    ],
+                                    rows: entries
+                                        .slice(0, 10)
+                                        .map((entry) => [
+                                            entryName(entry),
+                                            sort === "conversion"
+                                                ? `${metricOf(entry).toFixed(1)}%`
+                                                : formatNumber(metricOf(entry)),
+                                        ]),
+                                }}
                             >
                                 <HBarList
                                     items={entries.slice(0, 10).map((entry) => ({
@@ -161,53 +186,40 @@ export function CatalogSection({
                                 />
                             </ChartCard>
 
-                            <div className="flex flex-col gap-3 rounded-lg bg-gray-800 p-4 shadow-xl">
-                                <div className="font-semibold text-gray-200">
-                                    Every listed cosmetic
-                                </div>
-                                <DataTable
-                                    maxHeight="32rem"
-                                    data={{
-                                        columns: [
-                                            "Cosmetic",
-                                            "ID",
-                                            "Views",
-                                            "Acquisitions",
-                                            "Paid",
-                                            "Granted",
-                                            "Conversion",
-                                            "Owners",
-                                            "Equipped",
-                                            "Shelf rate",
-                                        ],
-                                        rows: entries.map((entry) => [
-                                            entryName(entry),
-                                            formatNumber(entry.cosmetic_id),
-                                            formatNumber(entry.views),
-                                            formatNumber(entry.acquisitions),
-                                            formatNumber(
-                                                entry.acquisitions_paid,
-                                            ),
-                                            formatNumber(
-                                                entry.acquisitions_granted,
-                                            ),
-                                            optional(
-                                                entry.conversion,
-                                                formatRate,
-                                            ),
-                                            optional(entry.owners, formatNumber),
-                                            optional(
-                                                entry.equipped,
-                                                formatNumber,
-                                            ),
-                                            optional(
-                                                entry.shelf_rate,
-                                                formatRate,
-                                            ),
-                                        ]),
-                                    }}
-                                />
-                            </div>
+                            <ChartCard
+                                title="Every listed cosmetic"
+                                tableMaxHeight="32rem"
+                                table={{
+                                    columns: [
+                                        "Cosmetic",
+                                        "ID",
+                                        "Views",
+                                        "Acquisitions",
+                                        "Paid",
+                                        "Free",
+                                        "Granted",
+                                        "Conversion",
+                                        "Owners",
+                                        "Equipped",
+                                        "Shelf rate",
+                                    ],
+                                    rows: entries.map((entry) => [
+                                        entryName(entry),
+                                        formatNumber(entry.cosmetic_id),
+                                        formatNumber(entry.views),
+                                        formatNumber(entry.acquisitions),
+                                        formatNumber(entry.acquisitions_paid),
+                                        formatNumber(entry.acquisitions_free),
+                                        formatNumber(
+                                            entry.acquisitions_granted,
+                                        ),
+                                        optional(entry.conversion, formatRate),
+                                        optional(entry.owners, formatNumber),
+                                        optional(entry.equipped, formatNumber),
+                                        optional(entry.shelf_rate, formatRate),
+                                    ]),
+                                }}
+                            />
                         </div>
                     );
                 }}

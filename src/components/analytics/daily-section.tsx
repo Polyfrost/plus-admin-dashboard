@@ -85,9 +85,14 @@ export function DailySection({
                             SERIES_COLORS[0],
                         ),
                         metric(
+                            "cosmetics_acquired_free",
+                            "Free",
+                            SERIES_COLORS[1],
+                        ),
+                        metric(
                             "cosmetics_acquired_granted",
                             "Granted",
-                            SERIES_COLORS[1],
+                            SERIES_COLORS[2],
                         ),
                     ];
                     const social = [
@@ -234,7 +239,7 @@ export function DailySection({
 
                                 <ChartCard
                                     title="Cosmetics acquired"
-                                    subtitle="Paid purchases and grants"
+                                    subtitle="Charged checkouts, zero-total checkouts and admin grants"
                                     table={seriesTable("Day", labels, cosmetics)}
                                 >
                                     <ColumnChart
@@ -293,7 +298,7 @@ export function DailySection({
 
                             <ChartCard
                                 title="Every daily field"
-                                subtitle="All 23 measures the rollup stores, per day"
+                                subtitle="All 24 measures the rollup stores, per day"
                                 table={dailyTable(days)}
                             />
                         </div>
@@ -316,6 +321,7 @@ function dailyTable(days: DailyPoint[]): TableData {
         ["Sessions", (day) => formatNumber(day.sessions)],
         ["Cosmetics", (day) => formatNumber(day.cosmetics_acquired)],
         ["… paid", (day) => formatNumber(day.cosmetics_acquired_paid)],
+        ["… free", (day) => formatNumber(day.cosmetics_acquired_free)],
         ["… granted", (day) => formatNumber(day.cosmetics_acquired_granted)],
         ["Transactions", (day) => formatNumber(day.transactions_completed)],
         ["… refunded", (day) => formatNumber(day.transactions_refunded)],

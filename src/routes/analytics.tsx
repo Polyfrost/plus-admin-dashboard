@@ -23,6 +23,7 @@ import {
     resolveRange,
     type RangeId,
 } from "@/lib/analytics-range";
+import { ExportScopeProvider } from "@/components/viz";
 import { FilterBar } from "@/components/analytics/filter-bar";
 import { HealthStrip } from "@/components/analytics/health-strip";
 import { OverviewSection } from "@/components/analytics/overview-section";
@@ -53,19 +54,31 @@ function Analytics() {
     const [armed, setArmed] = useState(false);
     const [nonce, setNonce] = useState(0);
 
+    const base = { env, password, nonce };
+    const health = useAnalyticsQuery<HealthResponse>("/health", {
+        ...base,
+        enabled: armed && password.length > 0,
+    });
+
     const range = useMemo(
-        () => resolveRange(rangeId, customStart, customEnd),
-        [rangeId, customStart, customEnd],
+        () => resolveRange(rangeId, customStart, customEnd, health.data?.earliest_day),
+        [rangeId, customStart, customEnd, health.data?.earliest_day],
     );
     const params: QueryParams = { start: range.start, end: range.end };
-    const enabled = armed && password.length > 0;
+    // All-time needs the rollup's first day before it can be sent as bounds,
+    // so hold the other queries until health has answered.
+    const enabled =
+        armed &&
+        password.length > 0 &&
+        (rangeId !== "all" || health.isSuccess || health.isError);
 
     const spanDays =
         range.start && range.end ? daySpan(range.start, range.end) : null;
+    // Names every exported file after the range it was taken over.
+    const exportScope =
+        range.start && range.end ? `${range.start}_${range.end}` : null;
     const hourlyAvailable =
         spanDays !== null && spanDays > 0 && spanDays <= MAX_HOURLY_SPAN_DAYS;
-
-    const base = { env, password, nonce };
 
     const overview = useAnalyticsQuery<OverviewResponse>("/overview", {
         ...base,
@@ -111,11 +124,6 @@ function Analytics() {
         enabled,
         params,
     });
-    const health = useAnalyticsQuery<HealthResponse>("/health", {
-        ...base,
-        enabled,
-    });
-
     const anyFetching = [
         overview,
         daily,
@@ -154,24 +162,26 @@ function Analytics() {
 
             <HealthStrip query={health} />
 
-            <OverviewSection query={overview} />
-            <DailySection query={daily} />
-            <RetentionSection query={retention} />
-            <ActivitySection
-                heatmap={activity}
-                hourly={hourly}
-                hourlyAvailable={hourlyAvailable}
-            />
-            <SessionsSection query={sessions} />
-            <CatalogSection
-                query={catalog}
-                sort={catalogSort}
-                setSort={setCatalogSort}
-                limit={catalogLimit}
-                setLimit={setCatalogLimit}
-            />
-            <MonetizationSection query={monetization} />
-            <ClientsSection query={clients} />
+            <ExportScopeProvider scope={exportScope}>
+                <OverviewSection query={overview} />
+                <DailySection query={daily} />
+                <RetentionSection query={retention} />
+                <ActivitySection
+                    heatmap={activity}
+                    hourly={hourly}
+                    hourlyAvailable={hourlyAvailable}
+                />
+                <SessionsSection query={sessions} />
+                <CatalogSection
+                    query={catalog}
+                    sort={catalogSort}
+                    setSort={setCatalogSort}
+                    limit={catalogLimit}
+                    setLimit={setCatalogLimit}
+                />
+                <MonetizationSection query={monetization} />
+                <ClientsSection query={clients} />
+            </ExportScopeProvider>
         </div>
     );
 }

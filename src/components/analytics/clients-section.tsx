@@ -49,6 +49,7 @@ export function ClientsSection({
                             className={`grid grid-cols-1 gap-4 xl:grid-cols-2 ${dimmed ? "opacity-50" : ""}`}
                         >
                             {groups.map((group) => {
+                                const items = toItems(group.rows);
                                 const total = group.rows.reduce(
                                     (sum, row) => sum + row.player_days,
                                     0,
@@ -58,9 +59,16 @@ export function ClientsSection({
                                         key={group.title}
                                         title={group.title}
                                         subtitle={`${formatNumber(total)} player-days · ${rangeLabel(data.start, data.end)}`}
+                                        table={{
+                                            columns: [group.title, "Player-days"],
+                                            rows: items.map((item) => [
+                                                item.label,
+                                                formatNumber(item.value),
+                                            ]),
+                                        }}
                                     >
                                         <HBarList
-                                            items={toItems(group.rows)}
+                                            items={items}
                                             formatValue={formatNumber}
                                         />
                                     </ChartCard>

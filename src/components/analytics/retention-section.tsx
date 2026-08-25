@@ -9,6 +9,7 @@ import {
 import { rangeLabel } from "@/lib/analytics-range";
 import {
     ChartCard,
+    CsvButton,
     LineChart,
     SERIES_COLORS,
     Section,
@@ -146,9 +147,30 @@ function CohortGrid({
 }: {
     cohorts: RetentionResponse["cohorts"];
 }) {
+    const table = {
+        columns: [
+            "Cohort",
+            "Size",
+            ...RETENTION_OFFSETS.map((offset) => `D${offset}`),
+        ],
+        rows: cohorts.map((cohort) => [
+            cohort.cohort_day,
+            formatNumber(cohort.cohort_size),
+            ...RETENTION_OFFSETS.map((offset) => {
+                const point = cohort.offsets.find(
+                    (one) => one.day_offset === offset,
+                );
+                return point ? formatRate(point.rate, 1) : "";
+            }),
+        ]),
+    };
+
     return (
         <div className="flex flex-col gap-3 rounded-lg bg-gray-800 p-4 shadow-xl">
-            <div className="font-semibold text-gray-200">Cohort grid</div>
+            <div className="flex items-center justify-between gap-2">
+                <div className="font-semibold text-gray-200">Cohort grid</div>
+                <CsvButton title="Cohort grid" data={table} />
+            </div>
             <div className="max-h-128 overflow-auto">
                 <table className="w-full text-left text-sm">
                     <thead className="sticky top-0 bg-gray-800 text-gray-400">

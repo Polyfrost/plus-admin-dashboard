@@ -21,7 +21,18 @@ export interface Range {
 /** The hourly shape is capped at 1000 points server-side. */
 export const MAX_HOURLY_SPAN_DAYS = 41;
 
-export function resolveRange(id: RangeId, start: string, end: string): Range {
+/**
+ * `earliest` is the first day the rollup has, from `/analytics/health`. Only
+ * the overview answers an unbounded period as all-time — every other endpoint
+ * falls back to its own default window — so all-time is sent as real bounds
+ * once that day is known.
+ */
+export function resolveRange(
+    id: RangeId,
+    start: string,
+    end: string,
+    earliest?: string | null,
+): Range {
     const today = utcToday();
     switch (id) {
         case "7d":
@@ -33,12 +44,17 @@ export function resolveRange(id: RangeId, start: string, end: string): Range {
         case "mtd":
             return { start: utcMonthStart(), end: today };
         case "all":
-            // Both bounds omitted: the overview answers all-time, and every
-            // other endpoint falls back to its own documented default window.
-            return { start: null, end: null };
+            return earliest
+                ? { start: earliest, end: today }
+                : { start: null, end: null };
         case "custom":
             return { start: start || null, end: end || null };
     }
+}
+
+/** For figures that are a snapshot at the end of the range, not a flow inside it. */
+export function asOfLabel(end?: string | null): string {
+    return end ? `As of ${formatDayLabel(end)} (UTC)` : "All time";
 }
 
 export function rangeLabel(start?: string | null, end?: string | null): string {

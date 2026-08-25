@@ -18,7 +18,7 @@ import {
     percent,
     type OverviewResponse,
 } from "@/lib/analytics";
-import { rangeLabel } from "@/lib/analytics-range";
+import { asOfLabel } from "@/lib/analytics-range";
 import { ChartCard, HBarList, Section, StatTile } from "@/components/viz";
 import { SectionBody, TileGrid } from "@/components/analytics/shared";
 
@@ -39,7 +39,7 @@ export function OverviewSection({
         <Section
             id="overview"
             title="Overview"
-            description="Cumulative figures (total users, owned items) are a snapshot at the end of the range; flow figures (new users, items acquired, playtime, sessions) only count what happened inside it."
+            description="Cumulative figures (total users, owned items) are a snapshot at the end of the range — they ignore its start; flow figures (new users, items acquired, playtime, sessions) only count what happened inside it."
         >
             <SectionBody query={query} what="the overview">
                 {(data, dimmed) => {
@@ -65,10 +65,7 @@ export function OverviewSection({
                                     icon={<Users size={16} />}
                                     label="Total users"
                                     value={formatNumber(data.total_users)}
-                                    sub={rangeLabel(
-                                        data.period.start,
-                                        data.period.end,
-                                    )}
+                                    sub={asOfLabel(data.period.end)}
                                 />
                                 <StatTile
                                     icon={<UserPlus size={16} />}
@@ -88,6 +85,7 @@ export function OverviewSection({
                                     icon={<Activity size={16} />}
                                     label="Sessions"
                                     value={formatNumber(play.total_sessions)}
+                                    sub="Started inside the range"
                                 />
                             </div>
 
@@ -96,6 +94,7 @@ export function OverviewSection({
                                     icon={<Package size={16} />}
                                     label="Owned items"
                                     value={formatNumber(owned.total_owned_items)}
+                                    sub={asOfLabel(data.period.end)}
                                 />
                                 <StatTile
                                     icon={<ShoppingCart size={16} />}
@@ -107,6 +106,7 @@ export function OverviewSection({
                                     icon={<Boxes size={16} />}
                                     label="Avg items / user"
                                     value={owned.average_per_user.toFixed(2)}
+                                    sub={asOfLabel(data.period.end)}
                                 />
                                 <StatTile
                                     icon={<Users size={16} />}
@@ -118,6 +118,7 @@ export function OverviewSection({
                                     icon={<Clock size={16} />}
                                     label="Total playtime"
                                     value={formatDuration(play.total_seconds)}
+                                    sub="Inside the range"
                                 />
                                 <StatTile
                                     icon={<Timer size={16} />}
@@ -150,6 +151,14 @@ export function OverviewSection({
                             <ChartCard
                                 title="Owned items per user"
                                 subtitle={`${formatNumber(bucketTotal)} users across the five buckets`}
+                                table={{
+                                    columns: ["Bucket", "Users", "Share"],
+                                    rows: buckets.map((bucket) => [
+                                        bucket.label,
+                                        formatNumber(bucket.value),
+                                        percent(bucket.value, bucketTotal),
+                                    ]),
+                                }}
                             >
                                 <HBarList
                                     items={buckets.map((bucket) => ({

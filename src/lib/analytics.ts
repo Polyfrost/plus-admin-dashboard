@@ -56,6 +56,7 @@ export interface DailyPoint {
     sessions: number;
     cosmetics_acquired: number;
     cosmetics_acquired_paid: number;
+    cosmetics_acquired_free: number;
     cosmetics_acquired_granted: number;
     transactions_completed: number;
     transactions_refunded: number;
@@ -163,7 +164,10 @@ export interface CatalogEntry {
     name?: string | null;
     views: number;
     acquisitions: number;
+    /** Stripe checkouts that actually charged money. */
     acquisitions_paid: number;
+    /** Stripe checkouts that came to zero. */
+    acquisitions_free: number;
     acquisitions_granted: number;
     /** `acquisitions / views`, absent when the cosmetic was never viewed. */
     conversion?: number | null;
@@ -236,6 +240,8 @@ export interface HealthResponse {
     last_error?: string | null;
     /** Days between the watermark and today. */
     watermark_age_days?: number | null;
+    /** First day the rollup has a row for */
+    earliest_day?: string | null;
 }
 
 /* ------------------------------------------------------------------ fetch */
@@ -349,12 +355,15 @@ export function formatMinor(minor: number): string {
     });
 }
 
+/** Carries the year whenever the day is not in the current one. */
 export function formatDayLabel(day: string): string {
     const date = new Date(`${day}T00:00:00Z`);
     if (Number.isNaN(date.getTime())) return day;
+    const thisYear = date.getUTCFullYear() === new Date().getUTCFullYear();
     return date.toLocaleDateString(undefined, {
         month: "short",
         day: "numeric",
+        ...(thisYear ? {} : { year: "numeric" }),
         timeZone: "UTC",
     });
 }
