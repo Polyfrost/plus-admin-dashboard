@@ -10,7 +10,7 @@ import {
     RefreshCw,
     ExternalLink,
 } from "lucide-react";
-import { ENV_OPTIONS, useEnv, usePassword } from "@/lib/settings";
+import { useRequiredSession } from "@/lib/session";
 
 export const Route = createFileRoute("/links")({
     component: Links,
@@ -71,8 +71,7 @@ function CopyButton({ value }: { value: string }) {
 }
 
 function Links() {
-    const [env, setEnv] = useEnv();
-    const [password, setPassword] = usePassword();
+    const { env, password } = useRequiredSession();
 
     const [slug, setSlug] = useState("");
     const [targetUrl, setTargetUrl] = useState("");
@@ -145,24 +144,6 @@ function Links() {
                     Tracked links
                 </h1>
                 <div className="flex items-center gap-2 flex-wrap">
-                    <select
-                        value={env}
-                        onChange={(e) => setEnv(e.target.value)}
-                        className="bg-gray-700 text-gray-200 px-3 py-2 rounded border border-gray-600 focus:outline-none focus:border-[#61dafb]"
-                    >
-                        {ENV_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                            </option>
-                        ))}
-                    </select>
-                    <input
-                        type="password"
-                        placeholder="Admin password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="bg-gray-700 text-gray-200 px-3 py-2 rounded border border-gray-600 focus:outline-none focus:border-[#61dafb]"
-                    />
                     <button
                         onClick={() => refetch()}
                         disabled={!password || isFetching}
@@ -180,8 +161,7 @@ function Links() {
             <p className="text-sm text-gray-500 -mt-2">
                 Branded share links resolve at{" "}
                 <code className="text-gray-400">polyfrost.org/go/&lt;slug&gt;</code>{" "}
-                and count unique visits. Set the environment and admin password,
-                then press Load.
+                and count unique visits. Press Load to fetch them.
             </p>
 
             {/* Create */}
@@ -232,7 +212,7 @@ function Links() {
 
             {!data && !error && (
                 <div className="text-gray-500">
-                    Enter the admin password and press Load.
+                    Press Load to fetch tracked links.
                 </div>
             )}
 

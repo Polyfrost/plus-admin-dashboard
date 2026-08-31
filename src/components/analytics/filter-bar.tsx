@@ -1,5 +1,4 @@
 import { RefreshCw } from "lucide-react";
-import { ENV_OPTIONS } from "@/lib/settings";
 import {
     RANGE_PRESETS,
     rangeLabel,
@@ -21,10 +20,6 @@ export const SECTIONS = [
 
 /** The connection, the range every query shares, and the jump links. */
 export function FilterBar({
-    env,
-    setEnv,
-    password,
-    setPassword,
     rangeId,
     setRangeId,
     customStart,
@@ -37,10 +32,6 @@ export function FilterBar({
     fetching,
     onLoad,
 }: {
-    env: string;
-    setEnv: (env: string) => void;
-    password: string;
-    setPassword: (password: string) => void;
     rangeId: RangeId;
     setRangeId: (id: RangeId) => void;
     customStart: string;
@@ -58,27 +49,9 @@ export function FilterBar({
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <h1 className="text-2xl font-bold text-gray-100">Analytics</h1>
                 <div className="flex flex-wrap items-center gap-2">
-                    <select
-                        value={env}
-                        onChange={(event) => setEnv(event.target.value)}
-                        className="rounded border border-gray-600 bg-gray-700 px-3 py-2 text-gray-200 focus:border-[#61dafb] focus:outline-none"
-                    >
-                        {ENV_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                                {option.label}
-                            </option>
-                        ))}
-                    </select>
-                    <input
-                        type="password"
-                        placeholder="Admin password"
-                        value={password}
-                        onChange={(event) => setPassword(event.target.value)}
-                        className="rounded border border-gray-600 bg-gray-700 px-3 py-2 text-gray-200 focus:border-[#61dafb] focus:outline-none"
-                    />
                     <button
                         onClick={onLoad}
-                        disabled={!password || fetching}
+                        disabled={fetching}
                         className="flex items-center gap-2 rounded bg-[#61dafb] px-4 py-2 font-semibold text-gray-900 disabled:opacity-50"
                     >
                         <RefreshCw

@@ -11,6 +11,9 @@ import { TanStackDevtools } from "@tanstack/react-devtools";
 import { ReactQueryDevtoolsPanel } from "@tanstack/react-query-devtools";
 import type { QueryClient } from "@tanstack/react-query";
 import { RouterProvider } from "react-aria-components";
+import { LogOut } from "lucide-react";
+import { ENV_OPTIONS, signOut, useSession } from "@/lib/session";
+import { SignIn } from "@/components/SignIn";
 
 interface AppRouterContext {
     queryClient: QueryClient;
@@ -29,6 +32,20 @@ export const Route = createRootRouteWithContext<AppRouterContext>()({
 
 function RootRoute() {
     const router = useRouter();
+    const session = useSession();
+
+    if (!session) {
+        return (
+            <>
+                <SignIn />
+                <DevTools />
+            </>
+        );
+    }
+
+    const envLabel =
+        ENV_OPTIONS.find((option) => option.value === session.env)?.label ??
+        session.env;
 
     return (
         <>
@@ -59,6 +76,24 @@ function RootRoute() {
                         >
                             Links
                         </Link>
+                        <Link
+                            to="/store"
+                            className="text-gray-400 hover:text-gray-100 [&.active]:text-[#61dafb]"
+                        >
+                            Store
+                        </Link>
+                        <div className="ml-auto flex items-center gap-3">
+                            <span className="text-sm text-gray-500">
+                                {envLabel}
+                            </span>
+                            <button
+                                onClick={signOut}
+                                className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-100"
+                            >
+                                <LogOut size={14} />
+                                Sign out
+                            </button>
+                        </div>
                     </nav>
                     <Outlet />
                 </div>

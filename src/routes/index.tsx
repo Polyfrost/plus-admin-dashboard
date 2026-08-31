@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { zipSync } from "fflate";
-import { useEnv, usePassword } from "@/lib/settings";
+import { useRequiredSession } from "@/lib/session";
 
 export const Route = createFileRoute("/")({
     component: Dashboard,
@@ -100,8 +100,7 @@ async function buildBundle(files: File[]): Promise<Uint8Array> {
 }
 
 function Dashboard() {
-    const [password, setPassword] = usePassword();
-    const [env, setEnv] = useEnv();
+    const { env, password } = useRequiredSession();
     const [file, setFile] = useState<File | null>(null);
     const [folderFiles, setFolderFiles] = useState<File[]>([]);
     const [type, setType] = useState<UploadType>("cape");
@@ -227,40 +226,6 @@ function Dashboard() {
                 onSubmit={handleUpload}
                 className="flex flex-col gap-4 w-full max-w-md bg-gray-800 p-6 rounded-lg shadow-xl"
             >
-                <div className="flex flex-col">
-                    <label className="mb-1 text-sm text-gray-300">
-                        Environment
-                    </label>
-                    <select
-                        value={env}
-                        onChange={(e) => setEnv(e.target.value)}
-                        className="p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-[#61dafb]"
-                    >
-                        <option value="http://127.0.0.1:8080">
-                            Local (127.0.0.1:8080)
-                        </option>
-                        <option value="https://plus-staging.polyfrost.org">
-                            Staging
-                        </option>
-                        <option value="https://plus.polyfrost.org">
-                            Production
-                        </option>
-                    </select>
-                </div>
-
-                <div className="flex flex-col">
-                    <label className="mb-1 text-sm text-gray-300">
-                        Admin Password
-                    </label>
-                    <input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-[#61dafb]"
-                        placeholder="Enter password"
-                    />
-                </div>
-
                 <div className="flex flex-col">
                     <label className="mb-1 text-sm text-gray-300">
                         Cosmetic Type

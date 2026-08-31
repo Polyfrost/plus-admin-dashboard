@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useEnv, usePassword } from "@/lib/settings";
+import { useRequiredSession } from "@/lib/session";
 import {
     daySpan,
     shiftDay,
@@ -40,8 +40,7 @@ export const Route = createFileRoute("/analytics")({
 });
 
 function Analytics() {
-    const [env, setEnv] = useEnv();
-    const [password, setPassword] = usePassword();
+    const { env, password } = useRequiredSession();
 
     const [rangeId, setRangeId] = useState<RangeId>("30d");
     const [customStart, setCustomStart] = useState(() =>
@@ -140,10 +139,6 @@ function Analytics() {
     return (
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 p-6">
             <FilterBar
-                env={env}
-                setEnv={setEnv}
-                password={password}
-                setPassword={setPassword}
                 rangeId={rangeId}
                 setRangeId={setRangeId}
                 customStart={customStart}
