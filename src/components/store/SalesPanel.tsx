@@ -25,10 +25,11 @@ interface Sale {
 }
 
 /**
- * PayNow validates this to 1–120 even when `duration` is "once", where there is
- * no interval to repeat over, so it is pinned to the low end of the range.
+ * A sale here always applies once. PayNow rejects `duration_in_intervals`
+ * outright unless the duration is "repeating", and rejects anything outside
+ * 1–120 when it is, so the field is left out of the body entirely.
  */
-const DURATION_IN_INTERVALS = 1;
+const DURATION = "once";
 
 function localNow(): string {
     const now = new Date();
@@ -50,8 +51,7 @@ export function SalesPanel() {
         name,
         discount_type: type,
         discount_amount: toDiscountAmount(type, amount),
-        duration: "once",
-        duration_in_intervals: DURATION_IN_INTERVALS,
+        duration: DURATION,
         apply_to_product_ids: [],
         apply_to_tag_ids: [],
         minimum_order_value: 0,

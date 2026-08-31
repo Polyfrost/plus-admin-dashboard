@@ -103,10 +103,17 @@ export function Toggle({
 }
 
 /**
- * PayNow owns these schemas and several fields have non-obvious units, so the
- * exact body is always visible before it is sent.
+ * PayNow owns most of these schemas and several fields have non-obvious units,
+ * so the exact body is always visible before it is sent. `target` names who
+ * receives it, since not every panel here talks to PayNow.
  */
-export function PayloadPreview({ body }: { body: unknown }) {
+export function PayloadPreview({
+    body,
+    target = "PayNow",
+}: {
+    body: unknown;
+    target?: string;
+}) {
     const [open, setOpen] = useState(false);
 
     return (
@@ -117,7 +124,7 @@ export function PayloadPreview({ body }: { body: unknown }) {
                 className="flex w-fit items-center gap-1 text-xs text-gray-500 hover:text-gray-300"
             >
                 {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                {open ? "Hide" : "Show"} the request PayNow will receive
+                {open ? "Hide" : "Show"} the request {target} will receive
             </button>
             {open && (
                 <pre className="overflow-x-auto rounded bg-gray-900 p-3 text-xs text-gray-400">

@@ -8,13 +8,17 @@ export type StoreResource =
     | "affiliate-links"
     | "upsell-settings";
 
-async function request(
+/**
+ * Calls the backend with the admin password. Every admin surface goes through
+ * here so a failure reads the same wherever it happens.
+ */
+export async function adminRequest(
     session: Session,
     method: string,
     path: string,
     body?: unknown,
 ): Promise<unknown> {
-    const response = await fetch(`${session.env}/v1/store${path}`, {
+    const response = await fetch(`${session.env}${path}`, {
         method,
         headers: {
             Authorization: session.password,
@@ -27,8 +31,8 @@ async function request(
 
     const text = await response.text();
     if (!response.ok) {
-        // The proxy passes PayNow's own message through, which says far more
-        // than a status code does.
+        // The backend answers with its own message — and the store proxy
+        // passes PayNow's through — which says far more than a status code.
         throw new Error(text.trim() || `Request failed (${response.status})`);
     }
 
@@ -39,7 +43,8 @@ export function useStoreList<T>(resource: StoreResource) {
     const session = useRequiredSession();
     return useQuery<T>({
         queryKey: ["store", resource, session.env],
-        queryFn: () => request(session, "GET", `/${resource}`) as Promise<T>,
+        queryFn: () =>
+            adminRequest(session, "GET", `/v1/store/${resource}`) as Promise<T>,
         // The app disables queries by default so the expensive analytics ones
         // wait for a Load press. These lists are small and load on open.
         enabled: true,
@@ -61,7 +66,12 @@ export function useStoreMutation<TVariables>(
     return useMutation({
         mutationFn: (variables: TVariables) => {
             const { method, path, body } = build(variables);
-            return request(session, method, `/${resource}${path}`, body);
+            return adminRequest(
+                session,
+                method,
+                `/v1/store/${resource}${path}`,
+                body,
+            );
         },
         onSuccess: () =>
             queryClient.invalidateQueries({

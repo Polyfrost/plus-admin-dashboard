@@ -5,6 +5,7 @@ import { SalesPanel } from "@/components/store/SalesPanel";
 import { CouponsPanel } from "@/components/store/CouponsPanel";
 import { AffiliatesPanel } from "@/components/store/AffiliatesPanel";
 import { UpsellsPanel } from "@/components/store/UpsellsPanel";
+import { GrantsPanel } from "@/components/store/GrantsPanel";
 
 export const Route = createFileRoute("/store")({
     component: StoreRoute,
@@ -15,6 +16,7 @@ const TABS = [
     { id: "coupons", label: "Coupons", render: () => <CouponsPanel /> },
     { id: "affiliates", label: "Affiliates", render: () => <AffiliatesPanel /> },
     { id: "upsells", label: "Upsells", render: () => <UpsellsPanel /> },
+    { id: "grants", label: "Grants", render: () => <GrantsPanel /> },
 ] as const;
 
 function StoreRoute() {
@@ -29,8 +31,10 @@ function StoreRoute() {
                     Storefront
                 </h1>
                 <p className="mt-1 text-sm text-gray-500">
-                    These live in PayNow, not in the plus database. Cosmetic and
-                    bundle pricing stays where it is, under Cosmetics.
+                    These live in PayNow, not in the plus database — except
+                    grants, which hand a cosmetic straight to a player here.
+                    Cosmetic and bundle pricing stays where it is, under
+                    Cosmetics.
                 </p>
             </div>
 
