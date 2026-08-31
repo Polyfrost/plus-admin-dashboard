@@ -51,7 +51,7 @@ export function GrantsPanel() {
     const catalog = useQuery({
         queryKey: ["cosmetics", session.env],
         queryFn: () =>
-            adminRequest(session, "GET", "/v0/cosmetics") as Promise<{
+            adminRequest(session, "GET", "/cosmetics") as Promise<{
                 cosmetics: CosmeticInfo[];
             }>,
         // Queries are disabled by default so the expensive analytics ones wait
