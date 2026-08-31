@@ -9,7 +9,9 @@ import {
     PayloadPreview,
     Table,
     Toggle,
+    describeDiscount,
     inputClass,
+    toDiscountAmount,
 } from "./shared";
 
 interface Coupon {
@@ -38,7 +40,7 @@ export function CouponsPanel() {
         code: code.trim().toUpperCase(),
         duration: "once",
         discount_type: type,
-        discount_amount: Number(amount) || 0,
+        discount_amount: toDiscountAmount(type, amount),
         discount_apply_individually: false,
         discount_apply_before_sales: false,
         minimum_order_value: 0,
@@ -104,12 +106,18 @@ export function CouponsPanel() {
                         </select>
                     </Field>
                     <Field
-                        label="Amount"
-                        help="Sent to PayNow unchanged — check the preview before creating your first one"
+                        label={type === "percent" ? "Percent off" : "Cents off"}
+                        help={
+                            type === "percent"
+                                ? "A real percentage — 25 takes a quarter off"
+                                : "Smallest currency unit — 250 takes 2.50 off"
+                        }
                     >
                         <input
                             type="number"
                             min="0"
+                            max={type === "percent" ? "100" : undefined}
+                            step={type === "percent" ? "0.1" : "1"}
                             value={amount}
                             onChange={(event) => setAmount(event.target.value)}
                             required
@@ -174,7 +182,7 @@ export function CouponsPanel() {
                     <tr key={coupon.id}>
                         <td className="px-4 py-3 font-mono">{coupon.code}</td>
                         <td className="px-4 py-3">
-                            {coupon.discount_amount} ({coupon.discount_type})
+                            {describeDiscount(coupon)}
                         </td>
                         <td className="px-4 py-3 text-gray-500">
                             {coupon.expires_at

@@ -9,7 +9,9 @@ import {
     PayloadPreview,
     Table,
     Toggle,
+    describeDiscount,
     inputClass,
+    toDiscountAmount,
 } from "./shared";
 
 interface Sale {
@@ -22,16 +24,11 @@ interface Sale {
     ends_at: string | null;
 }
 
-/** PayNow stores a percent as tenths, so 25% is 250. */
-function toDiscountAmount(type: string, value: number): number {
-    return type === "percent" ? Math.round(value * 10) : Math.round(value);
-}
-
-function describeDiscount(sale: Sale): string {
-    return sale.discount_type === "percent"
-        ? `${sale.discount_amount / 10}%`
-        : `${(sale.discount_amount / 100).toFixed(2)} off`;
-}
+/**
+ * PayNow validates this to 1–120 even when `duration` is "once", where there is
+ * no interval to repeat over, so it is pinned to the low end of the range.
+ */
+const DURATION_IN_INTERVALS = 1;
 
 function localNow(): string {
     const now = new Date();
@@ -52,9 +49,9 @@ export function SalesPanel() {
         enabled,
         name,
         discount_type: type,
-        discount_amount: toDiscountAmount(type, Number(amount) || 0),
+        discount_amount: toDiscountAmount(type, amount),
         duration: "once",
-        duration_in_intervals: 0,
+        duration_in_intervals: DURATION_IN_INTERVALS,
         apply_to_product_ids: [],
         apply_to_tag_ids: [],
         minimum_order_value: 0,
@@ -113,16 +110,17 @@ export function SalesPanel() {
                         </select>
                     </Field>
                     <Field
-                        label={type === "percent" ? "Percent" : "Cents"}
+                        label={type === "percent" ? "Percent off" : "Cents off"}
                         help={
                             type === "percent"
-                                ? "Sent as tenths of a percent"
-                                : "Smallest currency unit"
+                                ? "A real percentage — 25 takes a quarter off"
+                                : "Smallest currency unit — 250 takes 2.50 off"
                         }
                     >
                         <input
                             type="number"
                             min="0"
+                            max={type === "percent" ? "100" : undefined}
                             step={type === "percent" ? "0.1" : "1"}
                             value={amount}
                             onChange={(event) => setAmount(event.target.value)}

@@ -41,6 +41,42 @@ export function Field({
     );
 }
 
+/**
+ * PayNow stores every rate as tenths of a percent, so 12.5% is 125. Nothing in
+ * this section asks for tenths: the forms take a real percentage and convert
+ * here, so what is typed is what the buyer gets.
+ */
+export function percentToTenths(value: number | string): number {
+    return Math.round((Number(value) || 0) * 10);
+}
+
+/** The inverse, for a rate PayNow handed back. */
+export function tenthsToPercent(value: number): number {
+    return value / 10;
+}
+
+/** PayNow spells the percent type "percent" on sales and "percentage" on affiliates. */
+export function isPercentType(type: string): boolean {
+    return type.startsWith("percent");
+}
+
+/** A percent discount converts; a fixed one is already in the smallest currency unit. */
+export function toDiscountAmount(type: string, value: number | string): number {
+    return isPercentType(type)
+        ? percentToTenths(value)
+        : Math.round(Number(value) || 0);
+}
+
+/** Renders a discount PayNow returned as a percentage or a currency amount. */
+export function describeDiscount(discount: {
+    discount_type: string;
+    discount_amount: number;
+}): string {
+    return isPercentType(discount.discount_type)
+        ? `${tenthsToPercent(discount.discount_amount)}%`
+        : `${(discount.discount_amount / 100).toFixed(2)} off`;
+}
+
 export const inputClass =
     "rounded border border-gray-600 bg-gray-700 px-3 py-2 text-gray-200 focus:border-[#61dafb] focus:outline-none";
 

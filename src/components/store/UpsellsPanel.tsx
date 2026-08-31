@@ -8,6 +8,8 @@ import {
     PayloadPreview,
     Toggle,
     inputClass,
+    percentToTenths,
+    tenthsToPercent,
 } from "./shared";
 
 type CheckoutStyle =
@@ -51,7 +53,9 @@ export function UpsellsPanel() {
         );
     }
 
-    const discountPercent = draft.automatic_recommendations_discount_amount / 10;
+    const discountPercent = tenthsToPercent(
+        draft.automatic_recommendations_discount_amount,
+    );
 
     return (
         <Panel
@@ -103,11 +107,12 @@ export function UpsellsPanel() {
                     </Field>
                     <Field
                         label="Recommendation discount %"
-                        help="Sent as tenths of a percent"
+                        help="A real percentage — 15 takes 15% off the recommendation"
                     >
                         <input
                             type="number"
                             min="0"
+                            max="100"
                             step="0.1"
                             value={discountPercent}
                             onChange={(event) =>
@@ -118,10 +123,7 @@ export function UpsellsPanel() {
                                             ? "percentage"
                                             : "none",
                                     automatic_recommendations_discount_amount:
-                                        Math.round(
-                                            (Number(event.target.value) || 0) *
-                                                10,
-                                        ),
+                                        percentToTenths(event.target.value),
                                 })
                             }
                             className={inputClass}

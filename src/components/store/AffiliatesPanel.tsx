@@ -10,6 +10,8 @@ import {
     Table,
     Toggle,
     inputClass,
+    percentToTenths,
+    tenthsToPercent,
 } from "./shared";
 
 interface AffiliateLink {
@@ -23,11 +25,6 @@ interface AffiliateLink {
     tracking_length_days: number;
 }
 
-/** PayNow takes both rates as tenths of a percent, so 12.5% is 125. */
-function toTenths(value: string): number {
-    return Math.round((Number(value) || 0) * 10);
-}
-
 export function AffiliatesPanel() {
     const list = useStoreList<AffiliateLink[]>("affiliate-links");
     const [code, setCode] = useState("");
@@ -37,7 +34,7 @@ export function AffiliatesPanel() {
     const [trackingDays, setTrackingDays] = useState("30");
     const [enabled, setEnabled] = useState(true);
 
-    const discountTenths = toTenths(discount);
+    const discountTenths = percentToTenths(discount);
     const body = {
         wallet_id: walletId.trim(),
         enabled,
@@ -48,7 +45,7 @@ export function AffiliatesPanel() {
         discount_type: discountTenths > 0 ? "percentage" : "none",
         discount_amount: discountTenths,
         commission_type: "percentage",
-        commission_amount: toTenths(commission),
+        commission_amount: percentToTenths(commission),
         commission_amount_steps: [],
         last_commission_amount_step_repeats: false,
     };
@@ -109,10 +106,14 @@ export function AffiliatesPanel() {
                     </Field>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                    <Field label="Commission %" help="Sent as tenths of a percent">
+                    <Field
+                        label="Commission %"
+                        help="A real percentage — 10 pays a tenth of each sale"
+                    >
                         <input
                             type="number"
                             min="0"
+                            max="100"
                             step="0.1"
                             value={commission}
                             onChange={(event) =>
@@ -129,6 +130,7 @@ export function AffiliatesPanel() {
                         <input
                             type="number"
                             min="0"
+                            max="100"
                             step="0.1"
                             value={discount}
                             onChange={(event) => setDiscount(event.target.value)}
@@ -175,12 +177,12 @@ export function AffiliatesPanel() {
                     <tr key={link.id}>
                         <td className="px-4 py-3 font-mono">{link.code}</td>
                         <td className="px-4 py-3">
-                            {link.commission_amount / 10}%
+                            {tenthsToPercent(link.commission_amount)}%
                         </td>
                         <td className="px-4 py-3">
                             {link.discount_type === "none"
                                 ? "—"
-                                : `${link.discount_amount / 10}%`}
+                                : `${tenthsToPercent(link.discount_amount)}%`}
                         </td>
                         <td className="px-4 py-3 text-gray-500">
                             {link.tracking_length_days} days
