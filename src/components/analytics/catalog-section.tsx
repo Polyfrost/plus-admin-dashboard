@@ -9,7 +9,7 @@ import {
 } from "@/lib/analytics";
 import { rangeLabel } from "@/lib/analytics-range";
 import { ChartCard, HBarList, Section, StatTile } from "@/components/viz";
-import { SectionBody, TileGrid } from "@/components/analytics/shared";
+import { SectionBody, TileGrid, optional } from "@/components/analytics/shared";
 
 const CATALOG_SORTS: { id: CatalogSort; label: string }[] = [
     { id: "views", label: "Views" },
@@ -19,11 +19,6 @@ const CATALOG_SORTS: { id: CatalogSort; label: string }[] = [
 
 const entryName = (entry: CatalogEntry) =>
     entry.name?.trim() ? entry.name : `Cosmetic #${entry.cosmetic_id}`;
-
-const optional = (
-    value: number | null | undefined,
-    format: (value: number) => string,
-) => (value === null || value === undefined ? "—" : format(value));
 
 export function CatalogSection({
     query,
@@ -93,7 +88,7 @@ export function CatalogSection({
                             views: sum.views + entry.views,
                             acquisitions: sum.acquisitions + entry.acquisitions,
                             paid: sum.paid + entry.acquisitions_paid,
-                            free: sum.free + entry.acquisitions_free,
+                            free: sum.free + (entry.acquisitions_free ?? 0),
                             granted: sum.granted + entry.acquisitions_granted,
                         }),
                         {
@@ -103,6 +98,13 @@ export function CatalogSection({
                             free: 0,
                             granted: 0,
                         },
+                    );
+                    // Backends older than the paid/free split count a
+                    // zero-total checkout as paid and report no free figure.
+                    const freeReported = entries.every(
+                        (entry) =>
+                            entry.acquisitions_free !== null &&
+                            entry.acquisitions_free !== undefined,
                     );
 
                     return (
@@ -132,9 +134,15 @@ export function CatalogSection({
                                     icon={<Gift size={16} />}
                                     label="Free acquisitions"
                                     value={formatNumber(
-                                        totals.free + totals.granted,
+                                        freeReported
+                                            ? totals.free + totals.granted
+                                            : totals.granted,
                                     )}
-                                    sub={`${formatNumber(totals.free)} zero-priced · ${formatNumber(totals.granted)} granted`}
+                                    sub={
+                                        freeReported
+                                            ? `${formatNumber(totals.free)} zero-priced · ${formatNumber(totals.granted)} granted`
+                                            : `${formatNumber(totals.granted)} granted · zero-priced not reported`
+                                    }
                                 />
                                 <StatTile
                                     icon={<TrendingUp size={16} />}
@@ -209,13 +217,13 @@ export function CatalogSection({
                                         formatNumber(entry.views),
                                         formatNumber(entry.acquisitions),
                                         formatNumber(entry.acquisitions_paid),
-                                        formatNumber(entry.acquisitions_free),
+                                        optional(entry.acquisitions_free),
                                         formatNumber(
                                             entry.acquisitions_granted,
                                         ),
                                         optional(entry.conversion, formatRate),
-                                        optional(entry.owners, formatNumber),
-                                        optional(entry.equipped, formatNumber),
+                                        optional(entry.owners),
+                                        optional(entry.equipped),
                                         optional(entry.shelf_rate, formatRate),
                                     ]),
                                 }}

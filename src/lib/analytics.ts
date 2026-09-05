@@ -56,7 +56,11 @@ export interface DailyPoint {
     sessions: number;
     cosmetics_acquired: number;
     cosmetics_acquired_paid: number;
-    cosmetics_acquired_free: number;
+    /**
+     * Absent on deployments older than the paid/free split — those report a
+     * zero-total checkout as paid, so there is nothing to fall back to.
+     */
+    cosmetics_acquired_free?: number | null;
     cosmetics_acquired_granted: number;
     transactions_completed: number;
     transactions_refunded: number;
@@ -166,8 +170,11 @@ export interface CatalogEntry {
     acquisitions: number;
     /** Stripe checkouts that actually charged money. */
     acquisitions_paid: number;
-    /** Stripe checkouts that came to zero. */
-    acquisitions_free: number;
+    /**
+     * Stripe checkouts that came to zero. Absent on deployments older than the
+     * paid/free split, which counted these as paid.
+     */
+    acquisitions_free?: number | null;
     acquisitions_granted: number;
     /** `acquisitions / views`, absent when the cosmetic was never viewed. */
     conversion?: number | null;

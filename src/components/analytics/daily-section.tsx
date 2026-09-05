@@ -18,7 +18,11 @@ import {
     type ChartSeries,
     type TableData,
 } from "@/components/viz";
-import { SectionBody, seriesTable } from "@/components/analytics/shared";
+import {
+    SectionBody,
+    optional,
+    seriesTable,
+} from "@/components/analytics/shared";
 
 type DailyMetric = Exclude<keyof DailyPoint, "day">;
 
@@ -46,7 +50,7 @@ export function DailySection({
                         key,
                         name,
                         color,
-                        values: days.map((day) => day[key]),
+                        values: days.map((day) => day[key] ?? null),
                     });
 
                     const activeUsers = [
@@ -78,17 +82,29 @@ export function DailySection({
                     const sessionCounts = [
                         metric("sessions", "Sessions", SERIES_COLORS[0]),
                     ];
+                    // Backends older than the paid/free split count a
+                    // zero-total checkout as paid and send no free figure, so
+                    // the band would stack as a flat zero across the range.
+                    const freeReported = days.every(
+                        (day) =>
+                            day.cosmetics_acquired_free !== null &&
+                            day.cosmetics_acquired_free !== undefined,
+                    );
                     const cosmetics = [
                         metric(
                             "cosmetics_acquired_paid",
                             "Paid",
                             SERIES_COLORS[0],
                         ),
-                        metric(
-                            "cosmetics_acquired_free",
-                            "Free",
-                            SERIES_COLORS[1],
-                        ),
+                        ...(freeReported
+                            ? [
+                                  metric(
+                                      "cosmetics_acquired_free",
+                                      "Free",
+                                      SERIES_COLORS[1],
+                                  ),
+                              ]
+                            : []),
                         metric(
                             "cosmetics_acquired_granted",
                             "Granted",
@@ -239,7 +255,11 @@ export function DailySection({
 
                                 <ChartCard
                                     title="Cosmetics acquired"
-                                    subtitle="Charged checkouts, zero-total checkouts and admin grants"
+                                    subtitle={
+                                        freeReported
+                                            ? "Charged checkouts, zero-total checkouts and admin grants"
+                                            : "Checkouts and admin grants — this API does not split zero-total checkouts out of paid"
+                                    }
                                     table={seriesTable("Day", labels, cosmetics)}
                                 >
                                     <ColumnChart
@@ -321,7 +341,7 @@ function dailyTable(days: DailyPoint[]): TableData {
         ["Sessions", (day) => formatNumber(day.sessions)],
         ["Cosmetics", (day) => formatNumber(day.cosmetics_acquired)],
         ["… paid", (day) => formatNumber(day.cosmetics_acquired_paid)],
-        ["… free", (day) => formatNumber(day.cosmetics_acquired_free)],
+        ["… free", (day) => optional(day.cosmetics_acquired_free)],
         ["… granted", (day) => formatNumber(day.cosmetics_acquired_granted)],
         ["Transactions", (day) => formatNumber(day.transactions_completed)],
         ["… refunded", (day) => formatNumber(day.transactions_refunded)],
