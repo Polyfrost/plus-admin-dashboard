@@ -416,3 +416,32 @@ export function formatBucketLabel(bucket: SessionLengthBucket): string {
     }
     return `${label(bucket.min_seconds)}–${label(bucket.max_seconds)}`;
 }
+
+/**
+ * The quietest weekday/hour bucket by active players, or null when the range
+ * had no activity at all. Slots missing from the heatmap count as zero, so an
+ * hour nobody played counts as quieter than the lowest reported one.
+ */
+export function quietestCell(cells: HeatmapCell[]): HeatmapCell | null {
+    if (cells.length === 0) return null;
+    const lookup = new Map(
+        cells.map((cell) => [`${cell.dow}:${cell.hour_of_day}`, cell]),
+    );
+    let quietest: HeatmapCell | null = null;
+    for (let dow = 1; dow <= 7; dow++) {
+        for (let hour = 0; hour < 24; hour++) {
+            const cell = lookup.get(`${dow}:${hour}`) ?? {
+                dow,
+                hour_of_day: hour,
+                playtime_seconds: 0,
+                active_players: 0,
+                sessions_started: 0,
+                peak_concurrent: 0,
+            };
+            if (!quietest || cell.active_players < quietest.active_players) {
+                quietest = cell;
+            }
+        }
+    }
+    return quietest;
+}

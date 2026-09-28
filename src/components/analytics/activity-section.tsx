@@ -1,5 +1,5 @@
 import type { UseQueryResult } from "@tanstack/react-query";
-import { Activity, Clock, Gauge, Users } from "lucide-react";
+import { Activity, Clock, Gauge, Moon, Users } from "lucide-react";
 import {
     formatCompact,
     formatDayLabel,
@@ -7,6 +7,7 @@ import {
     formatHourOfDay,
     formatHours,
     formatNumber,
+    quietestCell,
     toHours,
     weekdayName,
     type ActivityResponse,
@@ -58,6 +59,7 @@ export function ActivitySection({
                         ),
                     );
                     const busiest = data.busiest;
+                    const quietest = quietestCell(cells);
 
                     return (
                         <div
@@ -109,6 +111,20 @@ export function ActivitySection({
                                                   busiest.playtime_seconds,
                                               )
                                             : "—"
+                                    }
+                                />
+                                <StatTile
+                                    icon={<Moon size={16} />}
+                                    label="Quietest hour"
+                                    value={
+                                        quietest
+                                            ? `${weekdayName(quietest.dow)} ${formatHourOfDay(quietest.hour_of_day)}`
+                                            : "—"
+                                    }
+                                    sub={
+                                        quietest
+                                            ? `${formatNumber(quietest.active_players)} player-hours`
+                                            : "no activity in this range"
                                     }
                                 />
                             </TileGrid>
