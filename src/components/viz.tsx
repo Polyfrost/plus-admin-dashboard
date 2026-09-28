@@ -262,21 +262,26 @@ export function HBarList({
     formatValue = (value) => value.toLocaleString(),
     color = SERIES_COLORS[0],
     empty = "Nothing reported in this range.",
+    limit = 10,
 }: {
     items: BarItem[];
     formatValue?: (value: number) => string;
     color?: string;
     empty?: string;
+    /** Rows past this are left to the card's table view. */
+    limit?: number;
 }) {
     if (items.length === 0) {
         return <div className="text-sm text-gray-500">{empty}</div>;
     }
 
-    const max = Math.max(1, ...items.map((item) => item.value));
+    const shown = items.slice(0, limit);
+    const hidden = items.length - shown.length;
+    const max = Math.max(1, ...shown.map((item) => item.value));
 
     return (
         <div className="flex flex-col gap-2.5">
-            {items.map((item) => (
+            {shown.map((item) => (
                 <div key={item.key} className="flex flex-col gap-1">
                     <div className="flex items-baseline justify-between gap-3 text-sm">
                         <span className="truncate text-gray-300">
@@ -302,6 +307,11 @@ export function HBarList({
                     </div>
                 </div>
             ))}
+            {hidden > 0 && (
+                <div className="text-xs text-gray-500">
+                    +{hidden.toLocaleString()} more in the table view
+                </div>
+            )}
         </div>
     );
 }

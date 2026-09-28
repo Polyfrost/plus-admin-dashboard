@@ -8,6 +8,7 @@ interface QueryOptions {
     /** Bumped by the Load button so a refetch happens even on an identical range. */
     nonce: number;
     params?: QueryParams;
+    refetchInterval?: number;
 }
 
 export function useAnalyticsQuery<T>(path: string, options: QueryOptions) {
@@ -17,6 +18,7 @@ export function useAnalyticsQuery<T>(path: string, options: QueryOptions) {
         queryFn: () =>
             analyticsGet<T>(options.env, options.password, path, params),
         enabled: options.enabled,
+        refetchInterval: options.refetchInterval,
         // Hold the previous render while a new range loads — no skeleton flash.
         placeholderData: keepPreviousData,
     });

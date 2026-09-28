@@ -237,6 +237,21 @@ export interface ClientsResponse {
     minecraft_versions: ClientBreakdown[];
     loaders: ClientBreakdown[];
     operating_systems: ClientBreakdown[];
+    /** ISO 3166-1 alpha-2 codes. Absent on deployments older than geo logging. */
+    countries?: ClientBreakdown[] | null;
+}
+
+export interface ModUsage {
+    mod_id: string;
+    players: number;
+}
+
+export interface ModsResponse {
+    start: string;
+    end: string;
+    /** Players whose latest mod report falls in the period. */
+    reporting_players: number;
+    mods: ModUsage[];
 }
 
 export interface HealthResponse {
@@ -249,6 +264,17 @@ export interface HealthResponse {
     watermark_age_days?: number | null;
     /** First day the rollup has a row for */
     earliest_day?: string | null;
+}
+
+/**
+ * Websockets open right now. Counted in memory per backend process, so it
+ * resets on restart and only covers the instance that answered.
+ */
+export interface RealtimeResponse {
+    total: number;
+    /** Held by a game client that reported mod/platform details at login. */
+    game: number;
+    other: number;
 }
 
 /* ------------------------------------------------------------------ fetch */

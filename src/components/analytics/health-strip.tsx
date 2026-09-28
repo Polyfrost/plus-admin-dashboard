@@ -5,12 +5,15 @@ import {
     formatDayLabel,
     formatNumber,
     type HealthResponse,
+    type RealtimeResponse,
 } from "@/lib/analytics";
 
 export function HealthStrip({
     query,
+    realtime,
 }: {
     query: UseQueryResult<HealthResponse>;
+    realtime: UseQueryResult<RealtimeResponse>;
 }) {
     if (query.error) {
         return (
@@ -52,6 +55,14 @@ export function HealthStrip({
                     {status.icon}
                     {status.label}
                 </span>
+                {realtime.data && (
+                    <span title="Websockets open right now on the instance that answered. Refreshes every 15s and resets when the backend restarts.">
+                        <Fact
+                            label="Live"
+                            value={`${formatNumber(realtime.data.game)} in game · ${formatNumber(realtime.data.other)} other`}
+                        />
+                    </span>
+                )}
                 <Fact
                     label="Rolled up days"
                     value={formatNumber(data.rolled_up_days)}

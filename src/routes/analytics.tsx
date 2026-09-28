@@ -11,9 +11,11 @@ import {
     type ClientsResponse,
     type DailyResponse,
     type HealthResponse,
+    type ModsResponse,
     type MonetizationResponse,
     type OverviewResponse,
     type QueryParams,
+    type RealtimeResponse,
     type RetentionResponse,
     type SessionsResponse,
 } from "@/lib/analytics";
@@ -34,6 +36,7 @@ import { SessionsSection } from "@/components/analytics/sessions-section";
 import { CatalogSection } from "@/components/analytics/catalog-section";
 import { MonetizationSection } from "@/components/analytics/monetization-section";
 import { ClientsSection } from "@/components/analytics/clients-section";
+import { ModsSection } from "@/components/analytics/mods-section";
 
 export const Route = createFileRoute("/analytics")({
     component: Analytics,
@@ -57,6 +60,11 @@ function Analytics() {
     const health = useAnalyticsQuery<HealthResponse>("/health", {
         ...base,
         enabled: armed && password.length > 0,
+    });
+    const realtime = useAnalyticsQuery<RealtimeResponse>("/realtime", {
+        ...base,
+        enabled: armed && password.length > 0,
+        refetchInterval: 15_000,
     });
 
     const range = useMemo(
@@ -123,6 +131,11 @@ function Analytics() {
         enabled,
         params,
     });
+    const mods = useAnalyticsQuery<ModsResponse>("/mods", {
+        ...base,
+        enabled,
+        params,
+    });
     const anyFetching = [
         overview,
         daily,
@@ -133,6 +146,7 @@ function Analytics() {
         catalog,
         monetization,
         clients,
+        mods,
         health,
     ].some((query) => query.isFetching);
 
@@ -155,7 +169,7 @@ function Analytics() {
                 }}
             />
 
-            <HealthStrip query={health} />
+            <HealthStrip query={health} realtime={realtime} />
 
             <ExportScopeProvider scope={exportScope}>
                 <OverviewSection query={overview} />
@@ -176,6 +190,7 @@ function Analytics() {
                 />
                 <MonetizationSection query={monetization} />
                 <ClientsSection query={clients} />
+                <ModsSection query={mods} />
             </ExportScopeProvider>
         </div>
     );

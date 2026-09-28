@@ -8,10 +8,20 @@ import { rangeLabel } from "@/lib/analytics-range";
 import { ChartCard, HBarList, Section } from "@/components/viz";
 import { SectionBody } from "@/components/analytics/shared";
 
-const toItems = (rows: ClientBreakdown[]) =>
+const countryNames = new Intl.DisplayNames(undefined, { type: "region" });
+
+const countryName = (code: string) => {
+    try {
+        return countryNames.of(code) ?? code;
+    } catch {
+        return code;
+    }
+};
+
+const toItems = (rows: ClientBreakdown[], label = (value: string) => value) =>
     rows.map((row, index) => ({
         key: `${row.value}-${index}`,
-        label: row.value.trim() ? row.value : "(not reported)",
+        label: row.value.trim() ? label(row.value) : "(not reported)",
         value: row.player_days,
     }));
 
@@ -24,7 +34,7 @@ export function ClientsSection({
         <Section
             id="clients"
             title="Clients & platforms"
-            description="Reported by the client at login. Every field is optional, so “(not reported)” means the client sent nothing. Counts are player-days: a player active on five days contributes five."
+            description="Reported by the client at login; the country comes from the request address. Every field is optional, so “(not reported)” means nothing was available. Counts are player-days: a player active on five days contributes five."
         >
             <SectionBody query={query} what="the client breakdown">
                 {(data, dimmed) => {
@@ -42,6 +52,11 @@ export function ClientsSection({
                             title: "Operating systems",
                             rows: data.operating_systems,
                         },
+                        {
+                            title: "Countries",
+                            rows: data.countries ?? [],
+                            label: countryName,
+                        },
                     ];
 
                     return (
@@ -49,7 +64,7 @@ export function ClientsSection({
                             className={`grid grid-cols-1 gap-4 xl:grid-cols-2 ${dimmed ? "opacity-50" : ""}`}
                         >
                             {groups.map((group) => {
-                                const items = toItems(group.rows);
+                                const items = toItems(group.rows, group.label);
                                 const total = group.rows.reduce(
                                     (sum, row) => sum + row.player_days,
                                     0,
