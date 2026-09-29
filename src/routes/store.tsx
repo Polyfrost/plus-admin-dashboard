@@ -4,6 +4,7 @@ import { Store } from "lucide-react";
 import { ProductsPanel } from "@/components/store/ProductsPanel";
 import { DiscountsPanel } from "@/components/store/DiscountsPanel";
 import { TagsPanel } from "@/components/store/TagsPanel";
+import { CollectionsPanel } from "@/components/store/CollectionsPanel";
 import { OrdersPanel } from "@/components/store/OrdersPanel";
 import { GrantsPanel } from "@/components/store/GrantsPanel";
 
@@ -16,6 +17,7 @@ const TABS = [
     { id: "sales", label: "Sales", render: () => <DiscountsPanel key="sale" kind="sale" /> },
     { id: "coupons", label: "Coupons", render: () => <DiscountsPanel key="coupon" kind="coupon" /> },
     { id: "tags", label: "Tags", render: () => <TagsPanel /> },
+    { id: "collections", label: "Collections", render: () => <CollectionsPanel /> },
     { id: "orders", label: "Orders", render: () => <OrdersPanel /> },
     { id: "grants", label: "Grants", render: () => <GrantsPanel /> },
 ] as const;

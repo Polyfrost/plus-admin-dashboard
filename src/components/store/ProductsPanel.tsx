@@ -252,7 +252,8 @@ function CreateProduct({
 
     const ready =
         picked.length > 0 &&
-        Number(price) > 0 &&
+        price.trim() !== "" &&
+        Number(price) >= 0 &&
         (bundle ? name.trim() !== "" : !alreadySold);
 
     return (
@@ -313,7 +314,7 @@ function CreateProduct({
                 <Field label="Price (USD)">
                     <input
                         type="number"
-                        min="0.01"
+                        min="0"
                         step="0.01"
                         value={price}
                         onChange={(event) => setPrice(event.target.value)}
@@ -575,7 +576,7 @@ function ProductDetails({
                 <Field label="Price (USD)">
                     <input
                         type="number"
-                        min="0.01"
+                        min="0"
                         step="0.01"
                         value={price}
                         onChange={(event) => setPrice(event.target.value)}

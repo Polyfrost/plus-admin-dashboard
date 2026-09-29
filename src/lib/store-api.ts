@@ -55,7 +55,9 @@ export function useAdminQuery<T>(path: string, enabled = true) {
 
 /**
  * Runs a write and refreshes every store query: a price change shows in the
- * catalogue, a discount in the product list, a grant in orders.
+ * catalogue, a discount in the product list, a grant in orders. Refreshes on
+ * failure too: the backend saves before pushing to PayNow, so a failed request
+ * may still have changed the store.
  */
 export function useAdminMutation<TVariables>(
     build: (variables: TVariables) => {
@@ -72,7 +74,7 @@ export function useAdminMutation<TVariables>(
             const { method, path, body } = build(variables);
             return adminRequest(session, method, path, body);
         },
-        onSuccess: () =>
+        onSettled: () =>
             queryClient.invalidateQueries({ queryKey: [STORE_KEY] }),
     });
 }
