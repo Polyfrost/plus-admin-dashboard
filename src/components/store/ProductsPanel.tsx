@@ -635,6 +635,7 @@ function ProductDetails({
 }
 
 interface Listing {
+    for_sale: boolean;
     available_from: string | null;
     available_until: string | null;
     stock_limit: number | null;
@@ -696,6 +697,7 @@ function ListingForm({
     const [rentalDays, setRentalDays] = useState(
         text(listing?.expires_after_days),
     );
+    const [forSale, setForSale] = useState(listing?.for_sale ?? true);
     const [giftingDisabled, setGiftingDisabled] = useState(
         listing?.gifting_disabled ?? false,
     );
@@ -715,6 +717,7 @@ function ListingForm({
     );
 
     const body = {
+        for_sale: forSale,
         available_from: fromLocalInput(from),
         available_until: fromLocalInput(until),
         stock_limit: optionalNumber(stock),
@@ -820,6 +823,11 @@ function ListingForm({
                 </Field>
             </div>
             <div className="flex flex-wrap gap-6">
+                <Toggle
+                    label="For sale (off: hidden from the store, disabled on PayNow)"
+                    checked={forSale}
+                    onChange={setForSale}
+                />
                 <Toggle
                     label="Gifting disabled"
                     checked={giftingDisabled}
