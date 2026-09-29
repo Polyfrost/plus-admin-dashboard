@@ -56,14 +56,13 @@ export interface DailyPoint {
     sessions: number;
     cosmetics_acquired: number;
     cosmetics_acquired_paid: number;
-    /**
-     * Absent on deployments older than the paid/free split — those report a
-     * zero-total checkout as paid, so there is nothing to fall back to.
-     */
-    cosmetics_acquired_free?: number | null;
+    cosmetics_acquired_free: number;
     cosmetics_acquired_granted: number;
     transactions_completed: number;
+    /** Sales made that day that were later refunded in full. */
     transactions_refunded: number;
+    transactions_partially_refunded: number;
+    transactions_charged_back: number;
     gift_transactions: number;
     friend_requests_sent: number;
     friend_requests_accepted: number;
@@ -168,14 +167,17 @@ export interface CatalogEntry {
     name?: string | null;
     views: number;
     acquisitions: number;
-    /** Stripe checkouts that actually charged money. */
+    /** Purchases that charged money, priced from the line that delivered it. */
     acquisitions_paid: number;
-    /**
-     * Stripe checkouts that came to zero. Absent on deployments older than the
-     * paid/free split, which counted these as paid.
-     */
-    acquisitions_free?: number | null;
+    /** Purchases whose line came to zero. */
+    acquisitions_free: number;
     acquisitions_granted: number;
+    /** A line's total shared evenly between the cosmetics it delivered. */
+    revenue_minor?: number | null;
+    /** Acquisitions taken back because the buyer asked for their money. */
+    refunded?: number | null;
+    /** Acquisitions taken back because the buyer disputed the payment. */
+    charged_back?: number | null;
     /** `acquisitions / views`, absent when the cosmetic was never viewed. */
     conversion?: number | null;
     /** From the most recent weekly snapshot at or before `end`. */
@@ -195,9 +197,12 @@ export interface MonetizationDay {
     day: string;
     gross_revenue_minor: number;
     refund_amount_minor: number;
+    chargeback_amount_minor: number;
     discount_amount_minor: number;
     transactions_completed: number;
     transactions_refunded: number;
+    transactions_partially_refunded: number;
+    transactions_charged_back: number;
     paying_users: number;
     gift_transactions: number;
 }
@@ -207,16 +212,22 @@ export interface MonetizationResponse {
     end: string;
     gross_revenue_minor: number;
     refund_amount_minor: number;
+    chargeback_amount_minor: number;
     /**
-     * Gross booked in the period minus refunds processed in it. A refund is
-     * booked on the day it was processed, not the day of the original sale.
+     * Gross booked in the period minus refunds and chargebacks processed in
+     * it. Both are booked on the day they were processed, not the day of the
+     * original sale.
      */
     net_revenue_minor: number;
     discount_amount_minor: number;
     /** Sales made in the period, including ones refunded later. */
     transactions_completed: number;
-    /** Sales made in the period that have since been refunded. */
+    /** Sales made in the period that have since been refunded in full. */
     transactions_refunded: number;
+    /** Refunded in part only, so some of their cosmetics are still owned. */
+    transactions_partially_refunded: number;
+    /** Disputed with the buyer's bank. */
+    transactions_charged_back: number;
     gift_transactions: number;
     /** Distinct payers per day, summed. Not distinct across the period. */
     paying_user_days: number;

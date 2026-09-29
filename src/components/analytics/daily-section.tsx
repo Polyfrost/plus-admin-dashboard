@@ -18,11 +18,7 @@ import {
     type ChartSeries,
     type TableData,
 } from "@/components/viz";
-import {
-    SectionBody,
-    optional,
-    seriesTable,
-} from "@/components/analytics/shared";
+import { SectionBody, seriesTable } from "@/components/analytics/shared";
 
 type DailyMetric = Exclude<keyof DailyPoint, "day">;
 
@@ -82,34 +78,36 @@ export function DailySection({
                     const sessionCounts = [
                         metric("sessions", "Sessions", SERIES_COLORS[0]),
                     ];
-                    // Backends older than the paid/free split count a
-                    // zero-total checkout as paid and send no free figure, so
-                    // the band would stack as a flat zero across the range.
-                    const freeReported = days.every(
-                        (day) =>
-                            day.cosmetics_acquired_free !== null &&
-                            day.cosmetics_acquired_free !== undefined,
-                    );
                     const cosmetics = [
                         metric(
                             "cosmetics_acquired_paid",
                             "Paid",
                             SERIES_COLORS[0],
                         ),
-                        ...(freeReported
-                            ? [
-                                  metric(
-                                      "cosmetics_acquired_free",
-                                      "Free",
-                                      SERIES_COLORS[1],
-                                  ),
-                              ]
-                            : []),
+                        metric(
+                            "cosmetics_acquired_free",
+                            "Free",
+                            SERIES_COLORS[1],
+                        ),
                         metric(
                             "cosmetics_acquired_granted",
                             "Granted",
                             SERIES_COLORS[2],
                         ),
+                        // In-game and anything else outside the three bands,
+                        // so the stack adds up to every acquisition.
+                        {
+                            key: "cosmetics_acquired_other",
+                            name: "Other",
+                            color: SERIES_COLORS[3],
+                            values: days.map(
+                                (day) =>
+                                    day.cosmetics_acquired -
+                                    day.cosmetics_acquired_paid -
+                                    day.cosmetics_acquired_free -
+                                    day.cosmetics_acquired_granted,
+                            ),
+                        },
                     ];
                     const social = [
                         metric(
@@ -255,11 +253,7 @@ export function DailySection({
 
                                 <ChartCard
                                     title="Cosmetics acquired"
-                                    subtitle={
-                                        freeReported
-                                            ? "Charged checkouts, zero-total checkouts and admin grants"
-                                            : "Checkouts and admin grants — this API does not split zero-total checkouts out of paid"
-                                    }
+                                    subtitle="Charged checkouts, zero-total checkouts, admin grants and the rest"
                                     table={seriesTable("Day", labels, cosmetics)}
                                 >
                                     <ColumnChart
@@ -318,7 +312,7 @@ export function DailySection({
 
                             <ChartCard
                                 title="Every daily field"
-                                subtitle="All 24 measures the rollup stores, per day"
+                                subtitle="Every measure the daily rollup reports"
                                 table={dailyTable(days)}
                             />
                         </div>
@@ -341,10 +335,18 @@ function dailyTable(days: DailyPoint[]): TableData {
         ["Sessions", (day) => formatNumber(day.sessions)],
         ["Cosmetics", (day) => formatNumber(day.cosmetics_acquired)],
         ["… paid", (day) => formatNumber(day.cosmetics_acquired_paid)],
-        ["… free", (day) => optional(day.cosmetics_acquired_free)],
+        ["… free", (day) => formatNumber(day.cosmetics_acquired_free)],
         ["… granted", (day) => formatNumber(day.cosmetics_acquired_granted)],
         ["Transactions", (day) => formatNumber(day.transactions_completed)],
         ["… refunded", (day) => formatNumber(day.transactions_refunded)],
+        [
+            "… part refunded",
+            (day) => formatNumber(day.transactions_partially_refunded),
+        ],
+        [
+            "… charged back",
+            (day) => formatNumber(day.transactions_charged_back),
+        ],
         ["Gifts", (day) => formatNumber(day.gift_transactions)],
         ["Requests sent", (day) => formatNumber(day.friend_requests_sent)],
         [

@@ -34,6 +34,7 @@ const COSMETIC_TYPES = [
     "aura",
     "boots",
     "shoulder",
+    "pet",
 ] as const;
 type CosmeticType = (typeof COSMETIC_TYPES)[number];
 
@@ -51,6 +52,7 @@ const BODY_SLOTS = [
     "aura",
     "boots",
     "shoulder",
+    "pet",
 ] as const;
 type BodySlot = (typeof BODY_SLOTS)[number];
 
@@ -64,6 +66,7 @@ const DEFAULT_SLOTS: Record<CosmeticType, BodySlot[]> = {
     aura: ["aura"],
     boots: ["boots"],
     shoulder: ["shoulder"],
+    pet: ["pet"],
 };
 
 function isBundleUrl(url: string): boolean {
@@ -164,8 +167,8 @@ function Dashboard() {
         if (name.trim()) {
             formData.append("name", name.trim());
         }
+        formData.append("type", type);
         if (!isEmote) {
-            formData.append("type", type);
             for (const slot of slots) {
                 formData.append("slots", slot);
             }
@@ -178,9 +181,8 @@ function Dashboard() {
                 formData.append("variant_order", variantOrder.trim());
         }
 
-        const endpoint = isEmote
-            ? `${env}/cosmetics/emote`
-            : `${env}/cosmetics/upload`;
+        // No base_price: an upload is never a product by itself.
+        const endpoint = `${env}/cosmetics/manage/create`;
 
         try {
             const res = await fetch(endpoint, {
@@ -220,7 +222,10 @@ function Dashboard() {
 
     return (
         <div className="min-h-screen bg-[#282c34] text-white flex flex-col items-center py-10">
-            <h1 className="text-3xl font-bold mb-8">PolyPlus Admin</h1>
+            <h1 className="text-3xl font-bold mb-2">PolyPlus Admin</h1>
+            <p className="mb-8 text-sm text-gray-400">
+                Uploading only adds the cosmetic. Sell it from Store → Products.
+            </p>
 
             <form
                 onSubmit={handleUpload}

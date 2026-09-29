@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Store } from "lucide-react";
-import { SalesPanel } from "@/components/store/SalesPanel";
-import { CouponsPanel } from "@/components/store/CouponsPanel";
-import { AffiliatesPanel } from "@/components/store/AffiliatesPanel";
-import { UpsellsPanel } from "@/components/store/UpsellsPanel";
+import { ProductsPanel } from "@/components/store/ProductsPanel";
+import { DiscountsPanel } from "@/components/store/DiscountsPanel";
+import { TagsPanel } from "@/components/store/TagsPanel";
+import { OrdersPanel } from "@/components/store/OrdersPanel";
 import { GrantsPanel } from "@/components/store/GrantsPanel";
 
 export const Route = createFileRoute("/store")({
@@ -12,29 +12,29 @@ export const Route = createFileRoute("/store")({
 });
 
 const TABS = [
-    { id: "sales", label: "Sales", render: () => <SalesPanel /> },
-    { id: "coupons", label: "Coupons", render: () => <CouponsPanel /> },
-    { id: "affiliates", label: "Affiliates", render: () => <AffiliatesPanel /> },
-    { id: "upsells", label: "Upsells", render: () => <UpsellsPanel /> },
+    { id: "products", label: "Products", render: () => <ProductsPanel /> },
+    { id: "sales", label: "Sales", render: () => <DiscountsPanel key="sale" kind="sale" /> },
+    { id: "coupons", label: "Coupons", render: () => <DiscountsPanel key="coupon" kind="coupon" /> },
+    { id: "tags", label: "Tags", render: () => <TagsPanel /> },
+    { id: "orders", label: "Orders", render: () => <OrdersPanel /> },
     { id: "grants", label: "Grants", render: () => <GrantsPanel /> },
 ] as const;
 
 function StoreRoute() {
-    const [active, setActive] = useState<(typeof TABS)[number]["id"]>("sales");
+    const [active, setActive] = useState<(typeof TABS)[number]["id"]>("products");
     const tab = TABS.find((candidate) => candidate.id === active) ?? TABS[0];
 
     return (
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
             <div>
                 <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-100">
                     <Store size={22} className="text-[#61dafb]" />
                     Storefront
                 </h1>
                 <p className="mt-1 text-sm text-gray-500">
-                    These live in PayNow, not in the plus database — except
-                    grants, which hand a cosmetic straight to a player here.
-                    Cosmetic and bundle pricing stays where it is, under
-                    Cosmetics.
+                    Everything here is saved in the plus backend, which mirrors
+                    products, prices, sales, coupons and tags to PayNow.
+                    Uploading cosmetics stays on the Dashboard page.
                 </p>
             </div>
 

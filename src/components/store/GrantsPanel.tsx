@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { Gift, Search } from "lucide-react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useRequiredSession } from "@/lib/session";
-import { adminRequest } from "@/lib/store-api";
+import { adminRequest, cosmeticUnits, useCatalog } from "@/lib/store-api";
 import {
     ErrorBanner,
     Field,
@@ -11,18 +11,6 @@ import {
     Table,
     inputClass,
 } from "./shared";
-
-/**
- * A buyable cosmetic as the catalogue lists it. `id` is the *group* id for a
- * grouped cosmetic, which is not what a grant takes — grants go by variant id,
- * and granting any variant grants the whole group.
- */
-interface CosmeticInfo {
-    id: number;
-    type: string;
-    name: string;
-    variants: { id: number; name: string }[];
-}
 
 interface ResolvedPlayer {
     id: string;
@@ -48,28 +36,12 @@ export function GrantsPanel() {
     const [variantId, setVariantId] = useState("");
     const [receipts, setReceipts] = useState<Receipt[]>([]);
 
-    const catalog = useQuery({
-        queryKey: ["cosmetics", session.env],
-        queryFn: () =>
-            adminRequest(session, "GET", "/cosmetics") as Promise<{
-                cosmetics: CosmeticInfo[];
-            }>,
-        // Queries are disabled by default so the expensive analytics ones wait
-        // for a Load press. The picker is unusable empty, so it loads on open.
-        enabled: true,
-    });
-
-    // A cosmetic with no variants has no id a grant could use.
-    const cosmetics = useMemo(
-        () =>
-            (catalog.data?.cosmetics ?? []).filter(
-                (cosmetic) => cosmetic.variants.length > 0,
-            ),
-        [catalog.data],
-    );
+    const catalog = useCatalog();
+    // Grants go by variant id, and any variant grants its whole group.
+    const cosmetics = useMemo(() => cosmeticUnits(catalog.data), [catalog.data]);
 
     const selected = cosmetics.find(
-        (cosmetic) => String(cosmetic.variants[0].id) === variantId,
+        (cosmetic) => String(cosmetic.first.id) === variantId,
     );
 
     const resolve = useMutation({
@@ -77,7 +49,7 @@ export function GrantsPanel() {
             adminRequest(
                 session,
                 "GET",
-                `/v1/grants/player/${encodeURIComponent(query.trim())}`,
+                `/v1/admin/grants/player/${encodeURIComponent(query.trim())}`,
             ) as Promise<ResolvedPlayer>,
         onSuccess: (resolved) => setPlayer(resolved),
     });
@@ -97,9 +69,9 @@ export function GrantsPanel() {
                 throw new Error("Pick a player and a cosmetic first.");
             }
 
-            const result = (await adminRequest(session, "POST", "/v1/grants", {
+            const result = (await adminRequest(session, "POST", "/v1/admin/grants", {
                 player: target.id,
-                cosmetic_id: cosmetic.variants[0].id,
+                cosmetic_id: cosmetic.first.id,
             })) as GrantResponse;
 
             setReceipts((previous) => [
@@ -118,7 +90,7 @@ export function GrantsPanel() {
     return (
         <Panel
             title="Grants"
-            description="Hands a player a cosmetic for nothing. Unlike the other tabs this one writes to the plus database rather than PayNow: it books an admin-grant transaction, which is what the Granted column in analytics counts, and pushes the new ownership to the player straight away if they are online. Granting any cosmetic in a group grants the whole group, and nothing here takes a grant back."
+            description="Hands a player a cosmetic for nothing. It books an admin-grant transaction, which is what the Granted column in analytics counts, and pushes the new ownership to the player straight away if they are online. Granting any cosmetic in a group grants the whole group, and nothing here takes a grant back."
         >
             <form
                 onSubmit={(event) => {
@@ -179,7 +151,7 @@ export function GrantsPanel() {
                     help={
                         selected && selected.variants.length > 1
                             ? `Grants all ${selected.variants.length} variants`
-                            : "Every enabled cosmetic in the catalogue"
+                            : "Any cosmetic, sold or not"
                     }
                 >
                     <select
@@ -198,8 +170,8 @@ export function GrantsPanel() {
                         </option>
                         {cosmetics.map((cosmetic) => (
                             <option
-                                key={cosmetic.id}
-                                value={cosmetic.variants[0].id}
+                                key={cosmetic.key}
+                                value={cosmetic.first.id}
                             >
                                 {cosmetic.name} ({cosmetic.type})
                             </option>

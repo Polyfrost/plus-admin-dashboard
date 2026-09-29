@@ -2,6 +2,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import {
     CreditCard,
     Gift,
+    ShieldAlert,
     Percent,
     ShoppingCart,
     Undo2,
@@ -41,7 +42,7 @@ export function MonetizationSection({
         <Section
             id="monetization"
             title="Revenue & refunds"
-            description="Amounts are minor units divided by 100; the API does not report a currency, and it never converts between them, so a store selling in more than one produces a meaningless sum. A sale stays booked on the day it was made even if it is refunded later — the refund books separately, on the day it was processed."
+            description="Amounts are minor units divided by 100; the API does not report a currency, and it never converts between them, so a store selling in more than one produces a meaningless sum. A sale stays booked on the day it was made even if it is refunded or charged back later — those book separately, on the day they were processed, and net is gross minus both."
         >
             <SectionBody query={query} what="monetization">
                 {(data, dimmed) => {
@@ -63,6 +64,14 @@ export function MonetizationSection({
                             color: SERIES_COLORS[1],
                             values: days.map((day) =>
                                 major(day.refund_amount_minor),
+                            ),
+                        },
+                        {
+                            key: "chargebacks",
+                            name: "Chargebacks",
+                            color: SERIES_COLORS[3],
+                            values: days.map((day) =>
+                                major(day.chargeback_amount_minor),
                             ),
                         },
                         {
@@ -88,6 +97,22 @@ export function MonetizationSection({
                             name: "Refunded",
                             color: SERIES_COLORS[1],
                             values: days.map((day) => day.transactions_refunded),
+                        },
+                        {
+                            key: "partially_refunded",
+                            name: "Part refunded",
+                            color: SERIES_COLORS[3],
+                            values: days.map(
+                                (day) => day.transactions_partially_refunded,
+                            ),
+                        },
+                        {
+                            key: "charged_back",
+                            name: "Charged back",
+                            color: SERIES_COLORS[4],
+                            values: days.map(
+                                (day) => day.transactions_charged_back,
+                            ),
                         },
                         {
                             key: "gifts",
@@ -125,7 +150,15 @@ export function MonetizationSection({
                                     icon={<Undo2 size={16} />}
                                     label="Refunded"
                                     value={formatMinor(data.refund_amount_minor)}
-                                    sub={`${percent(data.refund_amount_minor, data.gross_revenue_minor)} of gross`}
+                                    sub="Processed in the range"
+                                />
+                                <StatTile
+                                    icon={<ShieldAlert size={16} />}
+                                    label="Charged back"
+                                    value={formatMinor(
+                                        data.chargeback_amount_minor,
+                                    )}
+                                    sub="Processed in the range"
                                 />
                                 <StatTile
                                     icon={<Percent size={16} />}
@@ -148,7 +181,15 @@ export function MonetizationSection({
                                     value={formatNumber(
                                         data.transactions_refunded,
                                     )}
-                                    sub="Of the sales made in the range"
+                                    sub={`in full · ${formatNumber(data.transactions_partially_refunded)} in part · ${percent(data.transactions_refunded + data.transactions_partially_refunded, data.transactions_completed)} of sales`}
+                                />
+                                <StatTile
+                                    icon={<ShieldAlert size={16} />}
+                                    label="Disputed"
+                                    value={formatNumber(
+                                        data.transactions_charged_back,
+                                    )}
+                                    sub={`${percent(data.transactions_charged_back, data.transactions_completed)} of sales made in the range`}
                                 />
                                 <StatTile
                                     icon={<Gift size={16} />}
@@ -215,9 +256,12 @@ export function MonetizationSection({
                                             "Day",
                                             "Gross",
                                             "Refunds",
+                                            "Chargebacks",
                                             "Discounts",
                                             "Completed",
                                             "Refunded",
+                                            "Part refunded",
+                                            "Charged back",
                                             "Gifts",
                                             "Paying users",
                                         ],
@@ -226,6 +270,9 @@ export function MonetizationSection({
                                             formatMinor(day.gross_revenue_minor),
                                             formatMinor(day.refund_amount_minor),
                                             formatMinor(
+                                                day.chargeback_amount_minor,
+                                            ),
+                                            formatMinor(
                                                 day.discount_amount_minor,
                                             ),
                                             formatNumber(
@@ -233,6 +280,12 @@ export function MonetizationSection({
                                             ),
                                             formatNumber(
                                                 day.transactions_refunded,
+                                            ),
+                                            formatNumber(
+                                                day.transactions_partially_refunded,
+                                            ),
+                                            formatNumber(
+                                                day.transactions_charged_back,
                                             ),
                                             formatNumber(day.gift_transactions),
                                             formatNumber(day.paying_users),

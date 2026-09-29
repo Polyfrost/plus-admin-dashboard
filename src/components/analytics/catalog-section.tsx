@@ -1,6 +1,7 @@
 import type { UseQueryResult } from "@tanstack/react-query";
-import { Eye, Gift, Layers, ShoppingCart, TrendingUp } from "lucide-react";
+import { Eye, Gift, Layers, ShoppingCart, TrendingUp, Wallet } from "lucide-react";
 import {
+    formatMinor,
     formatNumber,
     formatRate,
     type CatalogEntry,
@@ -51,7 +52,8 @@ export function CatalogSection({
                 onChange={(event) => setLimit(Number(event.target.value))}
                 className="rounded border border-gray-600 bg-gray-700 px-2 py-1 text-sm text-gray-200"
             >
-                {[10, 25, 50, 100, 250].map((option) => (
+                {/* The backend caps the list at 100. */}
+                {[10, 25, 50, 100].map((option) => (
                     <option key={option} value={option}>
                         Top {option}
                     </option>
@@ -64,7 +66,7 @@ export function CatalogSection({
         <Section
             id="catalog"
             title="Cosmetic performance"
-            description="Views are only counted when a cosmetic is opened, so one seen in a list but never opened does not register. Conversion can exceed 100% for cosmetics acquired in a bundle without being opened first. Paid counts Stripe checkouts that charged money and free the ones that came to zero — a checkout only records its session total, so every cosmetic in a mixed basket counts as paid."
+            description="Views are only counted when a cosmetic is opened, so one seen in a list but never opened does not register. Conversion can exceed 100% for cosmetics acquired in a bundle without being opened first. Paid and free are priced from the order line that delivered each cosmetic, so a free item in a paid basket counts as free. Revenue splits a line's total evenly across what it delivered, so a bundle's price is shared between its contents."
         >
             <SectionBody query={query} what="the catalog">
                 {(data, dimmed) => {
@@ -88,23 +90,23 @@ export function CatalogSection({
                             views: sum.views + entry.views,
                             acquisitions: sum.acquisitions + entry.acquisitions,
                             paid: sum.paid + entry.acquisitions_paid,
-                            free: sum.free + (entry.acquisitions_free ?? 0),
+                            free: sum.free + entry.acquisitions_free,
                             granted: sum.granted + entry.acquisitions_granted,
+                            revenue: sum.revenue + (entry.revenue_minor ?? 0),
+                            returned:
+                                sum.returned +
+                                (entry.refunded ?? 0) +
+                                (entry.charged_back ?? 0),
                         }),
                         {
+                            revenue: 0,
+                            returned: 0,
                             views: 0,
                             acquisitions: 0,
                             paid: 0,
                             free: 0,
                             granted: 0,
                         },
-                    );
-                    // Backends older than the paid/free split count a
-                    // zero-total checkout as paid and report no free figure.
-                    const freeReported = entries.every(
-                        (entry) =>
-                            entry.acquisitions_free !== null &&
-                            entry.acquisitions_free !== undefined,
                     );
 
                     return (
@@ -131,18 +133,22 @@ export function CatalogSection({
                                     sub={`of ${formatNumber(totals.acquisitions)} acquisitions`}
                                 />
                                 <StatTile
+                                    icon={<Wallet size={16} />}
+                                    label="Revenue"
+                                    value={formatMinor(totals.revenue)}
+                                    sub={`${formatNumber(totals.returned)} acquisitions refunded or charged back`}
+                                />
+                                <StatTile
                                     icon={<Gift size={16} />}
                                     label="Free acquisitions"
-                                    value={formatNumber(
-                                        freeReported
-                                            ? totals.free + totals.granted
-                                            : totals.granted,
-                                    )}
-                                    sub={
-                                        freeReported
-                                            ? `${formatNumber(totals.free)} zero-priced · ${formatNumber(totals.granted)} granted`
-                                            : `${formatNumber(totals.granted)} granted · zero-priced not reported`
-                                    }
+                                    value={formatNumber(totals.free)}
+                                    sub="Purchases that came to zero"
+                                />
+                                <StatTile
+                                    icon={<Gift size={16} />}
+                                    label="Granted"
+                                    value={formatNumber(totals.granted)}
+                                    sub="Handed out by an admin"
                                 />
                                 <StatTile
                                     icon={<TrendingUp size={16} />}
@@ -206,6 +212,9 @@ export function CatalogSection({
                                         "Paid",
                                         "Free",
                                         "Granted",
+                                        "Revenue",
+                                        "Refunded",
+                                        "Charged back",
                                         "Conversion",
                                         "Owners",
                                         "Equipped",
@@ -217,10 +226,13 @@ export function CatalogSection({
                                         formatNumber(entry.views),
                                         formatNumber(entry.acquisitions),
                                         formatNumber(entry.acquisitions_paid),
-                                        optional(entry.acquisitions_free),
+                                        formatNumber(entry.acquisitions_free),
                                         formatNumber(
                                             entry.acquisitions_granted,
                                         ),
+                                        optional(entry.revenue_minor, formatMinor),
+                                        optional(entry.refunded),
+                                        optional(entry.charged_back),
                                         optional(entry.conversion, formatRate),
                                         optional(entry.owners),
                                         optional(entry.equipped),
