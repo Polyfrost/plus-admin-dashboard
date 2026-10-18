@@ -41,7 +41,7 @@ function StoreRoute() {
                 <p className="mt-1 text-sm text-gray-500">
                     Everything here is saved in the plus backend, which mirrors
                     products, prices, sales, coupons and tags to PayNow.
-                    Uploading cosmetics stays on the Dashboard page.
+                    Uploading and editing cosmetics lives on the Cosmetics page.
                 </p>
             </div>
             <RefreshAssets />

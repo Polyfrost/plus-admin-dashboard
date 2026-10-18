@@ -59,10 +59,10 @@ function RootRoute() {
                             Plus Admin
                         </span>
                         <Link
-                            to="/"
+                            to="/cosmetics"
                             className="text-gray-400 hover:text-gray-100 [&.active]:text-[#61dafb]"
                         >
-                            Dashboard
+                            Cosmetics
                         </Link>
                         <Link
                             to="/analytics"

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TokensRouteImport } from './routes/tokens'
 import { Route as StoreRouteImport } from './routes/store'
 import { Route as LinksRouteImport } from './routes/links'
+import { Route as CosmeticsRouteImport } from './routes/cosmetics'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
@@ -29,6 +30,11 @@ const StoreRoute = StoreRouteImport.update({
 const LinksRoute = LinksRouteImport.update({
   id: '/links',
   path: '/links',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CosmeticsRoute = CosmeticsRouteImport.update({
+  id: '/cosmetics',
+  path: '/cosmetics',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ChatRoute = ChatRouteImport.update({
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/chat': typeof ChatRoute
+  '/cosmetics': typeof CosmeticsRoute
   '/links': typeof LinksRoute
   '/store': typeof StoreRoute
   '/tokens': typeof TokensRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/chat': typeof ChatRoute
+  '/cosmetics': typeof CosmeticsRoute
   '/links': typeof LinksRoute
   '/store': typeof StoreRoute
   '/tokens': typeof TokensRoute
@@ -68,20 +76,36 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/chat': typeof ChatRoute
+  '/cosmetics': typeof CosmeticsRoute
   '/links': typeof LinksRoute
   '/store': typeof StoreRoute
   '/tokens': typeof TokensRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/analytics' | '/chat' | '/links' | '/store' | '/tokens'
+  fullPaths:
+    | '/'
+    | '/analytics'
+    | '/chat'
+    | '/cosmetics'
+    | '/links'
+    | '/store'
+    | '/tokens'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/analytics' | '/chat' | '/links' | '/store' | '/tokens'
+  to:
+    | '/'
+    | '/analytics'
+    | '/chat'
+    | '/cosmetics'
+    | '/links'
+    | '/store'
+    | '/tokens'
   id:
     | '__root__'
     | '/'
     | '/analytics'
     | '/chat'
+    | '/cosmetics'
     | '/links'
     | '/store'
     | '/tokens'
@@ -91,6 +115,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnalyticsRoute: typeof AnalyticsRoute
   ChatRoute: typeof ChatRoute
+  CosmeticsRoute: typeof CosmeticsRoute
   LinksRoute: typeof LinksRoute
   StoreRoute: typeof StoreRoute
   TokensRoute: typeof TokensRoute
@@ -117,6 +142,13 @@ declare module '@tanstack/react-router' {
       path: '/links'
       fullPath: '/links'
       preLoaderRoute: typeof LinksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cosmetics': {
+      id: '/cosmetics'
+      path: '/cosmetics'
+      fullPath: '/cosmetics'
+      preLoaderRoute: typeof CosmeticsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/chat': {
@@ -147,6 +179,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnalyticsRoute: AnalyticsRoute,
   ChatRoute: ChatRoute,
+  CosmeticsRoute: CosmeticsRoute,
   LinksRoute: LinksRoute,
   StoreRoute: StoreRoute,
   TokensRoute: TokensRoute,

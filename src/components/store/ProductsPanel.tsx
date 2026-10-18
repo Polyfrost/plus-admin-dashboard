@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { ImageUp, Pencil, Plus, Save, X } from "lucide-react";
 import {
-    BODY_SLOTS,
     cosmeticUnits,
     formatPrice,
     useAdminMutation,
@@ -9,7 +8,6 @@ import {
     useCatalog,
     useCollections,
     type CatalogBundle,
-    type CatalogCosmetic,
     type Collection,
     type CosmeticUnit,
 } from "@/lib/store-api";
@@ -503,9 +501,6 @@ function ProductRow({
                                     units={units}
                                     collections={collections}
                                 />
-                                {product.kind === "cosmetics" && (
-                                    <VariantsEditor unit={product.unit} />
-                                )}
                                 <ListingEditor product={product} units={units} />
                             </div>
                         )}
@@ -671,190 +666,6 @@ function ProductDetails({
                 {save.isPending ? "Saving…" : "Save details"}
             </button>
         </form>
-    );
-}
-
-/** Per-variant fields and files; group-wide ones live in Details above. */
-function VariantsEditor({ unit }: { unit: CosmeticUnit }) {
-    return (
-        <div className="flex flex-col gap-3">
-            <div className="font-semibold text-gray-300">
-                {unit.variants.length > 1 ? "Variants" : "File & slots"}
-            </div>
-            {unit.variants.map((variant) => (
-                <VariantForm
-                    key={variant.id}
-                    variant={variant}
-                    grouped={unit.group_id !== null}
-                />
-            ))}
-        </div>
-    );
-}
-
-function VariantForm({
-    variant,
-    grouped,
-}: {
-    variant: CatalogCosmetic;
-    grouped: boolean;
-}) {
-    const [label, setLabel] = useState(variant.variant_name ?? "");
-    const [model, setModel] = useState(variant.model_variant ?? "");
-    const [order, setOrder] = useState(String(variant.variant_order));
-    // The catalogue doesn't report slots, so they're only sent when picked.
-    const [slots, setSlots] = useState<string[]>([]);
-    const [file, setFile] = useState<File | null>(null);
-    const [fileKey, setFileKey] = useState(0);
-
-    const body = {
-        cosmetic_id: variant.id,
-        ...(label !== (variant.variant_name ?? "") && {
-            variant_name: label.trim() || null,
-        }),
-        ...(model !== (variant.model_variant ?? "") && {
-            model_variant: model || null,
-        }),
-        ...(Number(order) !== variant.variant_order && {
-            variant_order: Number(order),
-        }),
-        ...(slots.length > 0 && { slots }),
-    };
-
-    const save = useAdminMutation<void>(() => ({
-        method: "POST",
-        path: "/cosmetics/manage/update-variant",
-        body,
-    }));
-    const replace = useAdminMutation<File>((picked) => {
-        const form = new FormData();
-        form.append("cosmetic_id", String(variant.id));
-        form.append("file", picked, picked.name);
-        return { method: "POST", path: "/cosmetics/manage/replace-asset", body: form };
-    });
-
-    return (
-        <div className="flex flex-col gap-3 rounded border border-gray-700 p-3">
-            <div className="flex items-center gap-2 text-sm text-gray-400">
-                <span className="text-gray-200">
-                    {variant.variant_name ?? variant.name ?? `Cosmetic ${variant.id}`}
-                </span>
-                <span className="font-mono text-xs">#{variant.id}</span>
-                {variant.url && (
-                    <a
-                        href={variant.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="ml-auto text-xs text-[#61dafb] hover:underline"
-                    >
-                        Current file
-                    </a>
-                )}
-            </div>
-            <form
-                onSubmit={(event) => {
-                    event.preventDefault();
-                    save.mutate(undefined, { onSuccess: () => setSlots([]) });
-                }}
-                className="flex flex-col gap-3"
-            >
-                <div className="flex flex-wrap gap-3">
-                    {grouped && (
-                        <Field label="Variant label">
-                            <input
-                                value={label}
-                                onChange={(event) => setLabel(event.target.value)}
-                                placeholder="Red"
-                                className={inputClass}
-                            />
-                        </Field>
-                    )}
-                    <Field
-                        label="Skin model"
-                        help="Re-render the cover after changing this"
-                    >
-                        <select
-                            value={model}
-                            onChange={(event) => setModel(event.target.value)}
-                            className={inputClass}
-                        >
-                            <option value="">Any</option>
-                            <option value="slim">Slim</option>
-                            <option value="wide">Wide</option>
-                        </select>
-                    </Field>
-                    {grouped && (
-                        <Field label="Order">
-                            <input
-                                type="number"
-                                step="1"
-                                value={order}
-                                onChange={(event) => setOrder(event.target.value)}
-                                required
-                                className={inputClass}
-                            />
-                        </Field>
-                    )}
-                </div>
-                <Field
-                    label="Replace body slots"
-                    help="Leave empty to keep the current slots. Players wearing it in a removed slot are unequipped."
-                >
-                    <CheckList
-                        items={BODY_SLOTS.map((slot) => ({ id: slot, label: slot }))}
-                        selected={slots}
-                        onChange={setSlots}
-                    />
-                </Field>
-                <ErrorBanner error={save.error} />
-                {save.isSuccess && <p className="text-sm text-green-300">Saved.</p>}
-                <button
-                    type="submit"
-                    disabled={Object.keys(body).length === 1 || save.isPending}
-                    className={secondaryButton}
-                >
-                    <Save size={16} />
-                    {save.isPending ? "Saving…" : "Save variant"}
-                </button>
-            </form>
-            <form
-                onSubmit={(event) => {
-                    event.preventDefault();
-                    if (!file) return;
-                    replace.mutate(file, {
-                        onSuccess: () => {
-                            setFile(null);
-                            setFileKey(fileKey + 1);
-                        },
-                    });
-                }}
-                className="flex flex-wrap items-end gap-3"
-            >
-                <Field
-                    label="Replace file"
-                    help="A new model, texture or emote bundle; the cover re-renders from it"
-                >
-                    <input
-                        key={fileKey}
-                        type="file"
-                        onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                        className={inputClass}
-                    />
-                </Field>
-                <button
-                    type="submit"
-                    disabled={!file || replace.isPending}
-                    className={secondaryButton}
-                >
-                    <ImageUp size={16} />
-                    {replace.isPending ? "Uploading…" : "Upload"}
-                </button>
-            </form>
-            <ErrorBanner error={replace.error} />
-            {replace.isSuccess && (
-                <p className="text-sm text-green-300">File replaced.</p>
-            )}
-        </div>
     );
 }
 
