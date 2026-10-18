@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TokensRouteImport } from './routes/tokens'
 import { Route as StoreRouteImport } from './routes/store'
 import { Route as LinksRouteImport } from './routes/links'
+import { Route as LinkingRouteImport } from './routes/linking'
 import { Route as CosmeticsRouteImport } from './routes/cosmetics'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
@@ -30,6 +31,11 @@ const StoreRoute = StoreRouteImport.update({
 const LinksRoute = LinksRouteImport.update({
   id: '/links',
   path: '/links',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LinkingRoute = LinkingRouteImport.update({
+  id: '/linking',
+  path: '/linking',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CosmeticsRoute = CosmeticsRouteImport.update({
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AnalyticsRoute
   '/chat': typeof ChatRoute
   '/cosmetics': typeof CosmeticsRoute
+  '/linking': typeof LinkingRoute
   '/links': typeof LinksRoute
   '/store': typeof StoreRoute
   '/tokens': typeof TokensRoute
@@ -67,6 +74,7 @@ export interface FileRoutesByTo {
   '/analytics': typeof AnalyticsRoute
   '/chat': typeof ChatRoute
   '/cosmetics': typeof CosmeticsRoute
+  '/linking': typeof LinkingRoute
   '/links': typeof LinksRoute
   '/store': typeof StoreRoute
   '/tokens': typeof TokensRoute
@@ -77,6 +85,7 @@ export interface FileRoutesById {
   '/analytics': typeof AnalyticsRoute
   '/chat': typeof ChatRoute
   '/cosmetics': typeof CosmeticsRoute
+  '/linking': typeof LinkingRoute
   '/links': typeof LinksRoute
   '/store': typeof StoreRoute
   '/tokens': typeof TokensRoute
@@ -88,6 +97,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/chat'
     | '/cosmetics'
+    | '/linking'
     | '/links'
     | '/store'
     | '/tokens'
@@ -97,6 +107,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/chat'
     | '/cosmetics'
+    | '/linking'
     | '/links'
     | '/store'
     | '/tokens'
@@ -106,6 +117,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/chat'
     | '/cosmetics'
+    | '/linking'
     | '/links'
     | '/store'
     | '/tokens'
@@ -116,6 +128,7 @@ export interface RootRouteChildren {
   AnalyticsRoute: typeof AnalyticsRoute
   ChatRoute: typeof ChatRoute
   CosmeticsRoute: typeof CosmeticsRoute
+  LinkingRoute: typeof LinkingRoute
   LinksRoute: typeof LinksRoute
   StoreRoute: typeof StoreRoute
   TokensRoute: typeof TokensRoute
@@ -142,6 +155,13 @@ declare module '@tanstack/react-router' {
       path: '/links'
       fullPath: '/links'
       preLoaderRoute: typeof LinksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/linking': {
+      id: '/linking'
+      path: '/linking'
+      fullPath: '/linking'
+      preLoaderRoute: typeof LinkingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/cosmetics': {
@@ -180,6 +200,7 @@ const rootRouteChildren: RootRouteChildren = {
   AnalyticsRoute: AnalyticsRoute,
   ChatRoute: ChatRoute,
   CosmeticsRoute: CosmeticsRoute,
+  LinkingRoute: LinkingRoute,
   LinksRoute: LinksRoute,
   StoreRoute: StoreRoute,
   TokensRoute: TokensRoute,

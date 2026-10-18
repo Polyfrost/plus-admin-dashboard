@@ -1,5 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { RefreshCw, Store } from "lucide-react";
 import { useAdminMutation } from "@/lib/store-api";
 import { ErrorBanner, secondaryButton } from "@/components/store/shared";
@@ -10,10 +9,6 @@ import { CollectionsPanel } from "@/components/store/CollectionsPanel";
 import { OrdersPanel } from "@/components/store/OrdersPanel";
 import { GrantsPanel } from "@/components/store/GrantsPanel";
 import { ReferralsPanel } from "@/components/store/ReferralsPanel";
-
-export const Route = createFileRoute("/store")({
-    component: StoreRoute,
-});
 
 const TABS = [
     { id: "products", label: "Products", render: () => <ProductsPanel /> },
@@ -26,8 +21,17 @@ const TABS = [
     { id: "grants", label: "Grants", render: () => <GrantsPanel /> },
 ] as const;
 
+type TabId = (typeof TABS)[number]["id"];
+
+export const Route = createFileRoute("/store")({
+    component: StoreRoute,
+    validateSearch: (search: Record<string, unknown>): { tab?: TabId } => ({
+        tab: TABS.find((candidate) => candidate.id === search.tab)?.id,
+    }),
+});
+
 function StoreRoute() {
-    const [active, setActive] = useState<(typeof TABS)[number]["id"]>("products");
+    const { tab: active = "products" } = Route.useSearch();
     const tab = TABS.find((candidate) => candidate.id === active) ?? TABS[0];
 
     return (
@@ -49,9 +53,10 @@ function StoreRoute() {
 
             <div className="flex flex-wrap gap-2 border-b border-gray-800">
                 {TABS.map((candidate) => (
-                    <button
+                    <Link
                         key={candidate.id}
-                        onClick={() => setActive(candidate.id)}
+                        to="/store"
+                        search={{ tab: candidate.id }}
                         className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
                             candidate.id === active
                                 ? "border-[#61dafb] text-[#61dafb]"
@@ -59,7 +64,7 @@ function StoreRoute() {
                         }`}
                     >
                         {candidate.label}
-                    </button>
+                    </Link>
                 ))}
             </div>
 

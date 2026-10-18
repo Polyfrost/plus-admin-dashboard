@@ -94,6 +94,12 @@ function RootRoute() {
                         >
                             Chat
                         </Link>
+                        <Link
+                            to="/linking"
+                            className="text-gray-400 hover:text-gray-100 [&.active]:text-[#61dafb]"
+                        >
+                            Linking
+                        </Link>
                         <div className="ml-auto flex items-center gap-3">
                             <span className="text-sm text-gray-500">
                                 {envLabel}
