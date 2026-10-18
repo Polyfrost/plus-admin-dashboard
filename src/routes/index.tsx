@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { zipSync } from "fflate";
 import { useRequiredSession } from "@/lib/session";
+import { BODY_SLOTS, type BodySlot } from "@/lib/store-api";
 
 export const Route = createFileRoute("/")({
     component: Dashboard,
@@ -41,20 +42,6 @@ type CosmeticType = (typeof COSMETIC_TYPES)[number];
 const UPLOAD_TYPES = [...COSMETIC_TYPES, "emote"] as const;
 type UploadType = (typeof UPLOAD_TYPES)[number];
 
-const BODY_SLOTS = [
-    "cape",
-    "backpack",
-    "glasses",
-    "wings",
-    "left_hand",
-    "right_hand",
-    "hat",
-    "aura",
-    "boots",
-    "shoulder",
-    "pet",
-] as const;
-type BodySlot = (typeof BODY_SLOTS)[number];
 
 const DEFAULT_SLOTS: Record<CosmeticType, BodySlot[]> = {
     cape: ["cape"],

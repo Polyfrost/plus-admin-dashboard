@@ -214,6 +214,22 @@ export function useCollections() {
     return useAdminQuery<{ collections: Collection[] }>("/collections/list");
 }
 
+/** Where a cosmetic can be equipped; mirrors the backend's `BodySlot`. */
+export const BODY_SLOTS = [
+    "cape",
+    "backpack",
+    "glasses",
+    "wings",
+    "left_hand",
+    "right_hand",
+    "hat",
+    "aura",
+    "boots",
+    "shoulder",
+    "pet",
+] as const;
+export type BodySlot = (typeof BODY_SLOTS)[number];
+
 /** USD major units, the way cosmetic and bundle prices are stored. */
 export function formatPrice(price: number | null | undefined): string {
     return price == null ? "—" : `$${price.toFixed(2)}`;

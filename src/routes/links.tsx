@@ -21,6 +21,7 @@ interface TrackedLink {
     target_url: string;
     clicks: number;
     created_at: string;
+    referral: string | null;
 }
 
 interface ListResponse {
@@ -75,6 +76,7 @@ function Links() {
 
     const [slug, setSlug] = useState("");
     const [targetUrl, setTargetUrl] = useState("");
+    const [referral, setReferral] = useState("");
     const [formError, setFormError] = useState<string | null>(null);
 
     const listKey = ["links", env] as const;
@@ -99,6 +101,7 @@ function Links() {
                 body: JSON.stringify({
                     slug: slug.trim(),
                     target_url: targetUrl.trim(),
+                    referral: referral.trim() || null,
                 }),
             });
             if (!res.ok) {
@@ -110,6 +113,7 @@ function Links() {
         onSuccess: () => {
             setSlug("");
             setTargetUrl("");
+            setReferral("");
             setFormError(null);
             // The list query is manual (enabled: false), so invalidation alone
             // would not refresh it — refetch explicitly.
@@ -190,6 +194,13 @@ function Links() {
                         required
                         className="flex-2 min-w-80 bg-gray-700 text-gray-200 px-3 py-2 rounded border border-gray-600 focus:outline-none focus:border-[#61dafb]"
                     />
+                    <input
+                        value={referral}
+                        onChange={(e) => setReferral(e.target.value.toUpperCase())}
+                        placeholder="creator code (optional)"
+                        title="Adds ref=CODE to the target and counts clicks for the code (Storefront → Referrals)"
+                        className="min-w-40 bg-gray-700 text-gray-200 px-3 py-2 rounded border border-gray-600 focus:outline-none focus:border-[#61dafb]"
+                    />
                     <button
                         type="submit"
                         disabled={!password || createMutation.isPending}
@@ -224,6 +235,7 @@ function Links() {
                                 <th className="px-4 py-3">Slug</th>
                                 <th className="px-4 py-3">Share link</th>
                                 <th className="px-4 py-3">Target</th>
+                                <th className="px-4 py-3">Creator code</th>
                                 <th className="px-4 py-3 text-right">
                                     Unique visits
                                 </th>
@@ -234,7 +246,7 @@ function Links() {
                             {links.length === 0 && (
                                 <tr>
                                     <td
-                                        colSpan={5}
+                                        colSpan={6}
                                         className="px-4 py-4 text-gray-500"
                                     >
                                         No links yet.
@@ -262,6 +274,9 @@ function Links() {
                                             <ExternalLink size={14} />
                                             {link.target_url}
                                         </a>
+                                    </td>
+                                    <td className="px-4 py-3 font-mono text-gray-400">
+                                        {link.referral ?? "—"}
                                     </td>
                                     <td className="px-4 py-3 text-right font-semibold text-gray-100">
                                         {link.clicks.toLocaleString()}

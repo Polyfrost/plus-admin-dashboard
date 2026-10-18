@@ -9,11 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TokensRouteImport } from './routes/tokens'
 import { Route as StoreRouteImport } from './routes/store'
 import { Route as LinksRouteImport } from './routes/links'
+import { Route as ChatRouteImport } from './routes/chat'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TokensRoute = TokensRouteImport.update({
+  id: '/tokens',
+  path: '/tokens',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StoreRoute = StoreRouteImport.update({
   id: '/store',
   path: '/store',
@@ -22,6 +29,11 @@ const StoreRoute = StoreRouteImport.update({
 const LinksRoute = LinksRouteImport.update({
   id: '/links',
   path: '/links',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChatRoute = ChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AnalyticsRoute = AnalyticsRouteImport.update({
@@ -38,39 +50,61 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
+  '/chat': typeof ChatRoute
   '/links': typeof LinksRoute
   '/store': typeof StoreRoute
+  '/tokens': typeof TokensRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
+  '/chat': typeof ChatRoute
   '/links': typeof LinksRoute
   '/store': typeof StoreRoute
+  '/tokens': typeof TokensRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
+  '/chat': typeof ChatRoute
   '/links': typeof LinksRoute
   '/store': typeof StoreRoute
+  '/tokens': typeof TokensRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/analytics' | '/links' | '/store'
+  fullPaths: '/' | '/analytics' | '/chat' | '/links' | '/store' | '/tokens'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/analytics' | '/links' | '/store'
-  id: '__root__' | '/' | '/analytics' | '/links' | '/store'
+  to: '/' | '/analytics' | '/chat' | '/links' | '/store' | '/tokens'
+  id:
+    | '__root__'
+    | '/'
+    | '/analytics'
+    | '/chat'
+    | '/links'
+    | '/store'
+    | '/tokens'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnalyticsRoute: typeof AnalyticsRoute
+  ChatRoute: typeof ChatRoute
   LinksRoute: typeof LinksRoute
   StoreRoute: typeof StoreRoute
+  TokensRoute: typeof TokensRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/tokens': {
+      id: '/tokens'
+      path: '/tokens'
+      fullPath: '/tokens'
+      preLoaderRoute: typeof TokensRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/store': {
       id: '/store'
       path: '/store'
@@ -83,6 +117,13 @@ declare module '@tanstack/react-router' {
       path: '/links'
       fullPath: '/links'
       preLoaderRoute: typeof LinksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chat': {
+      id: '/chat'
+      path: '/chat'
+      fullPath: '/chat'
+      preLoaderRoute: typeof ChatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/analytics': {
@@ -105,8 +146,10 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnalyticsRoute: AnalyticsRoute,
+  ChatRoute: ChatRoute,
   LinksRoute: LinksRoute,
   StoreRoute: StoreRoute,
+  TokensRoute: TokensRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

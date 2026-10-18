@@ -82,6 +82,18 @@ function RootRoute() {
                         >
                             Store
                         </Link>
+                        <Link
+                            to="/tokens"
+                            className="text-gray-400 hover:text-gray-100 [&.active]:text-[#61dafb]"
+                        >
+                            Tokens
+                        </Link>
+                        <Link
+                            to="/chat"
+                            className="text-gray-400 hover:text-gray-100 [&.active]:text-[#61dafb]"
+                        >
+                            Chat
+                        </Link>
                         <div className="ml-auto flex items-center gap-3">
                             <span className="text-sm text-gray-500">
                                 {envLabel}
