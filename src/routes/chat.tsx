@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessagesSquare, Send } from "lucide-react";
 import { adminRequest, useAdminQuery } from "@/lib/store-api";
-import { useRequiredSession, type Session } from "@/lib/session";
+import { useSession, type Session } from "@/lib/session";
 import {
     Badge,
     ErrorBanner,
@@ -43,7 +43,7 @@ interface Packet {
 }
 
 function Chat() {
-    const session = useRequiredSession();
+    const session = useSession();
     const queryClient = useQueryClient();
     const targets = useAdminQuery<Target[]>("/v1/admin/special-chat/targets");
     const [picked, setPicked] = useState<string>();
@@ -60,10 +60,10 @@ function Chat() {
         staleTime: Infinity,
         refetchInterval: 90 * 60_000,
     });
-    // adminRequest sends `password` as the Authorization header verbatim.
+    // Acts as the target rather than the signed-in staff member.
     const player: Session | undefined = token.data && {
         env: session.env,
-        password: `Bearer ${token.data.token}`,
+        bearer: token.data.token,
     };
     const chatKey = ["chat", session.env, target];
 

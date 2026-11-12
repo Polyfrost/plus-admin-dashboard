@@ -1,101 +1,129 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ENV_OPTIONS, DEFAULT_ENV } from "@/lib/settings";
 
 const ENV_KEY = "plus-admin-env";
-const PASSWORD_KEY = "plus-admin-password";
 
+/**
+ * Which backend to talk to. The credential itself is an HttpOnly cookie the
+ * backend sets, which page scripts can never read; `bearer` overrides it to
+ * act as another player (the Special Chat account, a linking player).
+ */
 export interface Session {
     env: string;
-    password: string;
+    bearer?: string;
 }
 
-type Listener = (session: Session | null) => void;
+export interface Role {
+    id: number;
+    name: string;
+    color: number | null;
+    position: number;
+    /** u64 flags as a decimal string. */
+    permissions: string;
+}
 
+export interface Me {
+    id: string;
+    username: string | null;
+    permissions: bigint;
+    roles: Role[];
+}
+
+type Listener = (env: string) => void;
 const listeners = new Set<Listener>();
 
-function read(): Session | null {
+/** Only ever the listed backends: they receive the Xbox token at sign-in. */
+export function isKnownEnv(env: string): boolean {
+    return ENV_OPTIONS.some((option) => option.value === env);
+}
+
+function readEnv(): string {
     try {
-        const password = localStorage.getItem(PASSWORD_KEY);
-        if (!password) return null;
-        return { env: localStorage.getItem(ENV_KEY) ?? DEFAULT_ENV, password };
+        const env = localStorage.getItem(ENV_KEY);
+        return env && isKnownEnv(env) ? env : DEFAULT_ENV;
     } catch {
-        return null;
+        return DEFAULT_ENV;
     }
 }
 
-function publish(session: Session | null) {
-    for (const listener of listeners) listener(session);
-}
-
-export function signIn(session: Session) {
+export function setEnv(env: string) {
+    if (!isKnownEnv(env)) return;
     try {
-        localStorage.setItem(ENV_KEY, session.env);
-        localStorage.setItem(PASSWORD_KEY, session.password);
+        localStorage.setItem(ENV_KEY, env);
     } catch {
-        /* private window — the session still holds for this tab */
+        /* private window — the choice still holds for this tab */
     }
-    publish(session);
+    for (const listener of listeners) listener(env);
 }
 
-export function signOut() {
-    try {
-        localStorage.removeItem(PASSWORD_KEY);
-    } catch {
-        /* nothing to clear */
-    }
-    publish(null);
+/** Every request goes through here so the session cookie always rides along. */
+export function apiFetch(
+    session: Session,
+    path: string,
+    init: RequestInit = {},
+): Promise<Response> {
+    return fetch(`${session.env}${path}`, {
+        ...init,
+        credentials: "include",
+        headers: {
+            ...(session.bearer && {
+                Authorization: `Bearer ${session.bearer}`,
+            }),
+            ...init.headers,
+        },
+    });
 }
 
-/** The signed-in session, or null. Every page reads this instead of asking. */
-export function useSession(): Session | null {
-    const [session, setSession] = useState<Session | null>(read);
+export function useSession(): Session {
+    const [env, setState] = useState(readEnv);
 
     useEffect(() => {
-        listeners.add(setSession);
-        // Signing out in one tab signs out the others.
-        const onStorage = () => setSession(read());
+        listeners.add(setState);
+        const onStorage = () => setState(readEnv());
         window.addEventListener("storage", onStorage);
-
         return () => {
-            listeners.delete(setSession);
+            listeners.delete(setState);
             window.removeEventListener("storage", onStorage);
         };
     }, []);
 
-    return session;
+    return { env };
 }
 
-/**
- * Checks the credential before letting anyone in, so a typo fails on the login
- * screen rather than as a broken panel three pages later.
- */
-export async function verify(session: Session): Promise<string | null> {
-    let response: Response;
-    try {
-        response = await fetch(`${session.env}/v1/analytics/health`, {
-            headers: { Authorization: session.password },
-        });
-    } catch {
-        return `Could not reach ${session.env}.`;
-    }
+export const meKey = (env: string) => ["me", env];
 
-    if (response.status === 401 || response.status === 403) {
-        return "That password was not accepted.";
-    }
-    if (!response.ok) {
-        return `${session.env} answered ${response.status}.`;
-    }
-
-    return null;
-}
-
-/** For pages that only ever render behind the sign-in gate. */
-export function useRequiredSession(): Session {
+/** Who is signed in, or null when nobody is (or their session expired). */
+export function useMe() {
     const session = useSession();
-    if (!session) {
-        throw new Error("Rendered outside the sign-in gate");
-    }
-    return session;
+    return useQuery<Me | null>({
+        queryKey: meKey(session.env),
+        queryFn: async () => {
+            const response = await apiFetch(session, "/v1/me");
+            if (response.status === 401 || response.status === 403) {
+                return null;
+            }
+            if (!response.ok) {
+                throw new Error(`${session.env} answered ${response.status}`);
+            }
+            const me = await response.json();
+            return { ...me, permissions: BigInt(me.permissions) };
+        },
+        enabled: true,
+        refetchOnWindowFocus: true,
+        staleTime: 5 * 60_000,
+    });
+}
+
+/** The signed-in player. Only call behind the sign-in gate. */
+export function useRequiredMe(): Me {
+    const me = useMe().data;
+    if (!me) throw new Error("Rendered outside the sign-in gate");
+    return me;
+}
+
+export async function signOut(session: Session) {
+    await apiFetch(session, "/v1/dashboard/logout", { method: "POST" });
 }
 
 export { ENV_OPTIONS };

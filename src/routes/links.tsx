@@ -10,7 +10,7 @@ import {
     RefreshCw,
     ExternalLink,
 } from "lucide-react";
-import { useRequiredSession } from "@/lib/session";
+import { apiFetch, useSession } from "@/lib/session";
 
 export const Route = createFileRoute("/links")({
     component: Links,
@@ -28,19 +28,10 @@ interface ListResponse {
     links: TrackedLink[];
 }
 
-async function api(
-    env: string,
-    password: string,
-    path: string,
-    init: RequestInit = {},
-): Promise<Response> {
-    return fetch(`${env}${path}`, {
+function api(env: string, path: string, init: RequestInit = {}): Promise<Response> {
+    return apiFetch({ env }, path, {
         ...init,
-        headers: {
-            Authorization: password,
-            "Content-Type": "application/json",
-            ...init.headers,
-        },
+        headers: { "Content-Type": "application/json", ...init.headers },
     });
 }
 
@@ -72,7 +63,7 @@ function CopyButton({ value }: { value: string }) {
 }
 
 function Links() {
-    const { env, password } = useRequiredSession();
+    const { env } = useSession();
 
     const [slug, setSlug] = useState("");
     const [targetUrl, setTargetUrl] = useState("");
@@ -84,7 +75,7 @@ function Links() {
     const { data, isFetching, error, refetch } = useQuery<ListResponse>({
         queryKey: listKey,
         queryFn: async () => {
-            const res = await api(env, password, "/links");
+            const res = await api(env, "/links");
             if (!res.ok) {
                 const text = await res.text();
                 throw new Error(`${res.status} ${text}`.trim());
@@ -96,7 +87,7 @@ function Links() {
 
     const createMutation = useMutation({
         mutationFn: async () => {
-            const res = await api(env, password, "/links", {
+            const res = await api(env, "/links", {
                 method: "POST",
                 body: JSON.stringify({
                     slug: slug.trim(),
@@ -126,7 +117,6 @@ function Links() {
         mutationFn: async (slugToDelete: string) => {
             const res = await api(
                 env,
-                password,
                 `/links/${encodeURIComponent(slugToDelete)}`,
                 { method: "DELETE" },
             );
@@ -150,7 +140,7 @@ function Links() {
                 <div className="flex items-center gap-2 flex-wrap">
                     <button
                         onClick={() => refetch()}
-                        disabled={!password || isFetching}
+                        disabled={isFetching}
                         className="flex items-center gap-2 bg-[#61dafb] text-gray-900 font-semibold px-4 py-2 rounded disabled:opacity-50"
                     >
                         <RefreshCw
@@ -203,7 +193,7 @@ function Links() {
                     />
                     <button
                         type="submit"
-                        disabled={!password || createMutation.isPending}
+                        disabled={createMutation.isPending}
                         className="flex items-center gap-2 bg-[#61dafb] text-gray-900 font-semibold px-4 py-2 rounded disabled:opacity-50"
                     >
                         <Plus size={16} />

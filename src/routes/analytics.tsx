@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useRequiredSession } from "@/lib/session";
+import { useRequiredMe, useSession } from "@/lib/session";
+import { Perm, has } from "@/lib/permissions";
 import {
     daySpan,
     shiftDay,
@@ -43,7 +44,7 @@ export const Route = createFileRoute("/analytics")({
 });
 
 function Analytics() {
-    const { env, password } = useRequiredSession();
+    const { env } = useSession();
 
     const [rangeId, setRangeId] = useState<RangeId>("30d");
     const [customStart, setCustomStart] = useState(() =>
@@ -56,14 +57,14 @@ function Analytics() {
     const [armed, setArmed] = useState(false);
     const [nonce, setNonce] = useState(0);
 
-    const base = { env, password, nonce };
+    const base = { env, nonce };
     const health = useAnalyticsQuery<HealthResponse>("/health", {
         ...base,
-        enabled: armed && password.length > 0,
+        enabled: armed,
     });
     const realtime = useAnalyticsQuery<RealtimeResponse>("/realtime", {
         ...base,
-        enabled: armed && password.length > 0,
+        enabled: armed,
         refetchInterval: 15_000,
     });
 
@@ -76,7 +77,6 @@ function Analytics() {
     // so hold the other queries until health has answered.
     const enabled =
         armed &&
-        password.length > 0 &&
         (rangeId !== "all" || health.isSuccess || health.isError);
 
     const spanDays =
@@ -122,9 +122,10 @@ function Analytics() {
         enabled,
         params: { ...params, sort: catalogSort, limit: catalogLimit },
     });
+    const canSeeRevenue = has(useRequiredMe().permissions, Perm.VIEW_REVENUE);
     const monetization = useAnalyticsQuery<MonetizationResponse>(
         "/monetization",
-        { ...base, enabled, params },
+        { ...base, enabled: enabled && canSeeRevenue, params },
     );
     const clients = useAnalyticsQuery<ClientsResponse>("/clients", {
         ...base,
@@ -188,7 +189,7 @@ function Analytics() {
                     limit={catalogLimit}
                     setLimit={setCatalogLimit}
                 />
-                <MonetizationSection query={monetization} />
+                {canSeeRevenue && <MonetizationSection query={monetization} />}
                 <ClientsSection query={clients} />
                 <ModsSection query={mods} />
             </ExportScopeProvider>

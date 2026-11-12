@@ -1,3 +1,5 @@
+import { useRequiredMe } from "@/lib/session";
+import { Perm, has } from "@/lib/permissions";
 import { RefreshCw } from "lucide-react";
 import {
     RANGE_PRESETS,
@@ -45,6 +47,8 @@ export function FilterBar({
     fetching: boolean;
     onLoad: () => void;
 }) {
+    const canSeeRevenue = has(useRequiredMe().permissions, Perm.VIEW_REVENUE);
+
     return (
         <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-4">
@@ -107,7 +111,9 @@ export function FilterBar({
             </div>
 
             <div className="flex flex-wrap items-center gap-1 border-t border-gray-800 pt-3">
-                {SECTIONS.map((section) => (
+                {SECTIONS.filter(
+                    (section) => section.id !== "monetization" || canSeeRevenue,
+                ).map((section) => (
                     <button
                         key={section.id}
                         onClick={() =>

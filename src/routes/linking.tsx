@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link as LinkIcon, Search, ExternalLink } from "lucide-react";
-import { useRequiredSession } from "@/lib/session";
+import { useSession } from "@/lib/session";
 import { adminRequest } from "@/lib/store-api";
 import {
     ErrorBanner,
@@ -33,7 +33,7 @@ function Linking() {
 }
 
 function Lookup() {
-    const session = useRequiredSession();
+    const session = useSession();
     const [provider, setProvider] = useState<string>(PROVIDERS[0]);
     const [id, setId] = useState("");
     const lookup = useMutation({
@@ -41,7 +41,7 @@ function Lookup() {
             adminRequest(
                 session,
                 "GET",
-                `/v0/players/by-link/${provider}/${encodeURIComponent(id.trim())}`,
+                `/players/by-link/${provider}/${encodeURIComponent(id.trim())}`,
             ) as Promise<{ id: string; username: string | null }>,
     });
 
@@ -101,14 +101,14 @@ function Lookup() {
 }
 
 function StartLink() {
-    const session = useRequiredSession();
+    const session = useSession();
     const [token, setToken] = useState("");
     const start = useMutation({
         mutationFn: async () => {
             const { url } = (await adminRequest(
-                { env: session.env, password: `Bearer ${token.trim()}` },
+                { env: session.env, bearer: token.trim() },
                 "POST",
-                "/v0/account/links/discord",
+                "/account/links/discord",
             )) as { url: string };
             window.open(url, "_blank", "noopener");
             return url;
@@ -118,7 +118,7 @@ function StartLink() {
     return (
         <Panel
             title="Start a Discord link"
-            description="Starting a link needs a player token, not the admin password: the link goes to whoever the token belongs to. Opens Discord's consent screen in a new tab; the link expires after 10 minutes."
+            description="Starting a link needs that player's token, not your session: the link goes to whoever the token belongs to. Opens Discord's consent screen in a new tab; the link expires after 10 minutes."
         >
             <form
                 onSubmit={(event) => {

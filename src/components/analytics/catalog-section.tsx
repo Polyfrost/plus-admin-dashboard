@@ -132,12 +132,14 @@ export function CatalogSection({
                                     value={formatNumber(totals.paid)}
                                     sub={`of ${formatNumber(totals.acquisitions)} acquisitions`}
                                 />
-                                <StatTile
-                                    icon={<Wallet size={16} />}
-                                    label="Revenue"
-                                    value={formatMinor(totals.revenue)}
-                                    sub={`${formatNumber(totals.returned)} acquisitions refunded or charged back`}
-                                />
+                                {entries.some((entry) => entry.revenue_minor != null) && (
+                                    <StatTile
+                                        icon={<Wallet size={16} />}
+                                        label="Revenue"
+                                        value={formatMinor(totals.revenue)}
+                                        sub={`${formatNumber(totals.returned)} acquisitions refunded or charged back`}
+                                    />
+                                )}
                                 <StatTile
                                     icon={<Gift size={16} />}
                                     label="Free acquisitions"

@@ -2,9 +2,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { KeyRound, Plus } from "lucide-react";
 import { useAdminMutation, useAdminQuery } from "@/lib/store-api";
+import { useRequiredMe } from "@/lib/session";
+import { KEY_FORBIDDEN, PERMISSIONS, Perm, has, permissionLabels } from "@/lib/permissions";
 import {
     Badge,
     DeleteButton,
+    PermissionPicker,
     ErrorBanner,
     Field,
     Panel,
@@ -21,6 +24,8 @@ interface TokenInfo {
     id: number;
     label: string;
     exempt_prefixes: string[];
+    /** u64 flags as a decimal string. */
+    permissions: string;
     created_at: string;
     revoked_at: string | null;
 }
@@ -39,18 +44,21 @@ function Tokens() {
                 API tokens
             </h1>
             <Panel
-                title="Rate limit exemptions"
-                description="A token lifts the per-address rate limit on the given path prefixes for a first-party service, sent in the X-Api-Token header. The secret is shown once on creation; a lost token has to be revoked and replaced. Revoking reaches every replica within a minute."
+                title="Service keys"
+                description="Keys for external services, sent in the X-Api-Token header. A key can lift the per-address rate limit on path prefixes, and its permissions let the service call those endpoints (the analytics aggregations, say) as itself. Keys never act as a player and cannot manage roles or keys. The secret is shown once on creation; to change a key, revoke it and make a new one. Revoking reaches every replica within a minute."
             >
                 <CreateToken />
                 <ErrorBanner error={tokens.error ?? revoke.error} />
                 <Table
-                    headers={["Label", "Exempt prefixes", "Created", "Status", ""]}
+                    headers={["Label", "Permissions", "Exempt prefixes", "Created", "Status", ""]}
                     empty={!tokens.isPending && !tokens.data?.length}
                 >
                     {tokens.data?.map((token) => (
                         <tr key={token.id}>
                             <td className="px-4 py-3">{token.label}</td>
+                            <td className="px-4 py-3 text-xs text-gray-300">
+                                {permissionLabels(BigInt(token.permissions)).join(", ") || "—"}
+                            </td>
                             <td className="px-4 py-3 font-mono text-xs text-gray-400">
                                 {token.exempt_prefixes.join(", ")}
                             </td>
@@ -88,18 +96,30 @@ function Tokens() {
 }
 
 function CreateToken() {
+    const me = useRequiredMe();
     const [label, setLabel] = useState("");
-    const [prefixes, setPrefixes] = useState("/");
+    const [prefixes, setPrefixes] = useState("");
+    const [flags, setFlags] = useState(0n);
     const [secret, setSecret] = useState<string | null>(null);
 
     const exempt = prefixes
         .split(",")
         .map((prefix) => prefix.trim())
         .filter(Boolean);
+    // Only what a key may hold and you hold yourself; the backend checks both too.
+    const grantable = PERMISSIONS.filter(
+        (permission) =>
+            (Perm[permission.key] & KEY_FORBIDDEN) === 0n &&
+            has(me.permissions, Perm[permission.key]),
+    );
     const create = useAdminMutation<void>(() => ({
         method: "POST",
         path: "/v1/tokens",
-        body: { label: label.trim(), exempt_prefixes: exempt },
+        body: {
+            label: label.trim(),
+            exempt_prefixes: exempt,
+            permissions: flags.toString(),
+        },
     }));
 
     return (
@@ -110,6 +130,8 @@ function CreateToken() {
                     onSuccess: (created) => {
                         setSecret((created as { token: string }).token);
                         setLabel("");
+                        setPrefixes("");
+                        setFlags(0n);
                     },
                 });
             }}
@@ -127,17 +149,18 @@ function CreateToken() {
                     />
                 </Field>
                 <Field
-                    label="Exempt prefixes"
-                    help="Comma separated, each starting with /. A lone / exempts everything"
+                    label="Rate-limit exempt prefixes"
+                    help="Optional. Comma separated, each starting with /. A lone / exempts everything"
                 >
                     <input
                         value={prefixes}
                         onChange={(event) => setPrefixes(event.target.value)}
-                        required
+                        placeholder="/v1/analytics/"
                         className={`${inputClass} font-mono`}
                     />
                 </Field>
             </div>
+            <PermissionPicker flags={flags} onChange={setFlags} options={grantable} />
             <ErrorBanner error={create.error} />
             {secret && (
                 <div className="rounded border border-amber-700 bg-amber-900/30 px-4 py-3 text-sm text-amber-200">
@@ -151,7 +174,7 @@ function CreateToken() {
                 type="submit"
                 disabled={
                     !label.trim() ||
-                    !exempt.length ||
+                    (!exempt.length && flags === 0n) ||
                     !exempt.every((prefix) => prefix.startsWith("/")) ||
                     create.isPending
                 }

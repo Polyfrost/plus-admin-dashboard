@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRequiredSession, type Session } from "@/lib/session";
+import { apiFetch, useSession, type Session } from "@/lib/session";
 
 /**
- * Calls the backend with the admin password. Every admin surface goes through
+ * Calls the backend as the signed-in player. Every admin surface goes through
  * here so a failure reads the same wherever it happens.
  */
 export async function adminRequest(
@@ -12,14 +12,9 @@ export async function adminRequest(
     body?: unknown,
 ): Promise<unknown> {
     const isForm = body instanceof FormData;
-    const response = await fetch(`${session.env}${path}`, {
+    const response = await apiFetch(session, path, {
         method,
-        headers: isForm
-            ? { Authorization: session.password }
-            : {
-                  Authorization: session.password,
-                  "Content-Type": "application/json",
-              },
+        headers: isForm ? {} : { "Content-Type": "application/json" },
         body:
             body === undefined
                 ? undefined
@@ -43,7 +38,7 @@ export async function adminRequest(
 const STORE_KEY = "store";
 
 export function useAdminQuery<T>(path: string, enabled = true) {
-    const session = useRequiredSession();
+    const session = useSession();
     return useQuery<T>({
         queryKey: [STORE_KEY, session.env, path],
         queryFn: () => adminRequest(session, "GET", path) as Promise<T>,
@@ -59,19 +54,21 @@ export function useAdminQuery<T>(path: string, enabled = true) {
  * failure too: the backend saves before pushing to PayNow, so a failed request
  * may still have changed the store.
  */
+interface AdminCall {
+    method: string;
+    path: string;
+    body?: unknown;
+}
+
 export function useAdminMutation<TVariables>(
-    build: (variables: TVariables) => {
-        method: string;
-        path: string;
-        body?: unknown;
-    },
+    build: (variables: TVariables) => AdminCall | Promise<AdminCall>,
 ) {
-    const session = useRequiredSession();
+    const session = useSession();
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (variables: TVariables) => {
-            const { method, path, body } = build(variables);
+        mutationFn: async (variables: TVariables) => {
+            const { method, path, body } = await build(variables);
             return adminRequest(session, method, path, body);
         },
         onSettled: () =>

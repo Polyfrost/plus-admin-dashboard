@@ -3,7 +3,6 @@ import { analyticsGet, type QueryParams } from "@/lib/analytics";
 
 interface QueryOptions {
     env: string;
-    password: string;
     enabled: boolean;
     /** Bumped by the Load button so a refetch happens even on an identical range. */
     nonce: number;
@@ -16,7 +15,7 @@ export function useAnalyticsQuery<T>(path: string, options: QueryOptions) {
     return useQuery<T>({
         queryKey: ["analytics", path, options.env, params, options.nonce],
         queryFn: () =>
-            analyticsGet<T>(options.env, options.password, path, params),
+            analyticsGet<T>(options.env, path, params),
         enabled: options.enabled,
         refetchInterval: options.refetchInterval,
         // Hold the previous render while a new range loads — no skeleton flash.

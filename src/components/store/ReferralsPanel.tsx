@@ -20,7 +20,8 @@ interface Referral {
     enabled: boolean;
     created_at: string;
     orders: number;
-    revenue_minor: number;
+    /** Null without View revenue. */
+    revenue_minor: number | null;
     clicks: number;
 }
 
@@ -109,7 +110,9 @@ function ReferralRow({
                 <td className="px-4 py-3">{referral.name}</td>
                 <td className="px-4 py-3 text-gray-400">{coupon}</td>
                 <td className="px-4 py-3">{referral.orders}</td>
-                <td className="px-4 py-3">{formatMinor(referral.revenue_minor, "USD")}</td>
+                <td className="px-4 py-3">
+                    {referral.revenue_minor === null ? "—" : formatMinor(referral.revenue_minor, "USD")}
+                </td>
                 <td className="px-4 py-3">{referral.clicks}</td>
                 <td className="px-4 py-3">
                     <Badge tone={referral.enabled ? "green" : "amber"}>

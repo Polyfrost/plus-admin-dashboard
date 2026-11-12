@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
+import { PERMISSIONS, Perm } from "@/lib/permissions";
 
 export function Panel({
     title,
@@ -278,4 +279,48 @@ export function fromLocalInput(value: string): string | null {
 /** Empty input means "not set"; anything else is a number. */
 export function optionalNumber(value: string): number | null {
     return value.trim() === "" ? null : Number(value);
+}
+
+/** Checkboxes for permission flags. Administrator implies the rest, so they show ticked. */
+export function PermissionPicker({
+    flags,
+    onChange,
+    options = PERMISSIONS,
+}: {
+    flags: bigint;
+    onChange: (flags: bigint) => void;
+    options?: readonly (typeof PERMISSIONS)[number][];
+}) {
+    const administrator = (flags & Perm.ADMINISTRATOR) !== 0n;
+    return (
+        <fieldset className="grid gap-2 sm:grid-cols-2">
+            <legend className="mb-2 text-sm text-gray-400">Permissions</legend>
+            {options.map((permission) => {
+                const bit = Perm[permission.key];
+                const implied = administrator && bit !== Perm.ADMINISTRATOR;
+                return (
+                    <label
+                        key={permission.key}
+                        className="flex items-start gap-2 rounded border border-gray-700 px-3 py-2 text-sm"
+                    >
+                        <input
+                            type="checkbox"
+                            className="mt-1"
+                            checked={(flags & bit) !== 0n || implied}
+                            disabled={implied}
+                            onChange={(event) =>
+                                onChange(event.target.checked ? flags | bit : flags & ~bit)
+                            }
+                        />
+                        <span>
+                            <span className="text-gray-200">{permission.label}</span>
+                            <span className="block text-xs text-gray-500">
+                                {permission.description}
+                            </span>
+                        </span>
+                    </label>
+                );
+            })}
+        </fieldset>
+    );
 }

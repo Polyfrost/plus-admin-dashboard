@@ -11,8 +11,12 @@ import { TanStackDevtools } from "@tanstack/react-devtools";
 import { ReactQueryDevtoolsPanel } from "@tanstack/react-query-devtools";
 import type { QueryClient } from "@tanstack/react-query";
 import { RouterProvider } from "react-aria-components";
-import { LogOut } from "lucide-react";
-import { ENV_OPTIONS, signOut, useSession } from "@/lib/session";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { LoaderCircle, LogOut } from "lucide-react";
+import { ENV_OPTIONS, meKey, signOut, useMe, useSession } from "@/lib/session";
+import { finishMicrosoftSignIn, isMicrosoftCallback } from "@/lib/microsoft";
+import { PAGES, hasAny } from "@/lib/permissions";
 import { SignIn } from "@/components/SignIn";
 
 interface AppRouterContext {
@@ -32,12 +36,37 @@ export const Route = createRootRouteWithContext<AppRouterContext>()({
 
 function RootRoute() {
     const router = useRouter();
+    const queryClient = useQueryClient();
     const session = useSession();
+    const me = useMe();
+    // Microsoft redirected back here: finish signing in before asking /me.
+    const [callback, setCallback] = useState(isMicrosoftCallback);
+    const [signInError, setSignInError] = useState<string | null>(null);
 
-    if (!session) {
+    useEffect(() => {
+        if (!callback) return;
+        void finishMicrosoftSignIn().then(async (error) => {
+            setSignInError(error);
+            await queryClient.invalidateQueries({ queryKey: meKey(session.env) });
+            setCallback(false);
+        });
+    }, [callback, queryClient, session.env]);
+
+    if (callback || me.isPending) {
+        return (
+            <div className="flex min-h-screen items-center justify-center text-gray-400">
+                <LoaderCircle size={24} className="animate-spin" />
+            </div>
+        );
+    }
+
+    if (!me.data) {
         return (
             <>
-                <SignIn />
+                <SignIn
+                    key={signInError}
+                    error={signInError ?? (me.error && me.error.message)}
+                />
                 <DevTools />
             </>
         );
@@ -46,6 +75,7 @@ function RootRoute() {
     const envLabel =
         ENV_OPTIONS.find((option) => option.value === session.env)?.label ??
         session.env;
+    const permissions = me.data.permissions;
 
     return (
         <>
@@ -58,54 +88,26 @@ function RootRoute() {
                         <span className="font-bold text-gray-100">
                             Plus Admin
                         </span>
-                        <Link
-                            to="/cosmetics"
-                            className="text-gray-400 hover:text-gray-100 [&.active]:text-[#61dafb]"
-                        >
-                            Cosmetics
-                        </Link>
-                        <Link
-                            to="/analytics"
-                            className="text-gray-400 hover:text-gray-100 [&.active]:text-[#61dafb]"
-                        >
-                            Analytics
-                        </Link>
-                        <Link
-                            to="/links"
-                            className="text-gray-400 hover:text-gray-100 [&.active]:text-[#61dafb]"
-                        >
-                            Links
-                        </Link>
-                        <Link
-                            to="/store"
-                            className="text-gray-400 hover:text-gray-100 [&.active]:text-[#61dafb]"
-                        >
-                            Store
-                        </Link>
-                        <Link
-                            to="/tokens"
-                            className="text-gray-400 hover:text-gray-100 [&.active]:text-[#61dafb]"
-                        >
-                            Tokens
-                        </Link>
-                        <Link
-                            to="/chat"
-                            className="text-gray-400 hover:text-gray-100 [&.active]:text-[#61dafb]"
-                        >
-                            Chat
-                        </Link>
-                        <Link
-                            to="/linking"
-                            className="text-gray-400 hover:text-gray-100 [&.active]:text-[#61dafb]"
-                        >
-                            Linking
-                        </Link>
+                        {PAGES.filter((page) => hasAny(permissions, page.perm)).map(
+                            (page) => (
+                                <Link
+                                    key={page.to}
+                                    to={page.to}
+                                    className="text-gray-400 hover:text-gray-100 [&.active]:text-[#61dafb]"
+                                >
+                                    {page.label}
+                                </Link>
+                            ),
+                        )}
                         <div className="ml-auto flex items-center gap-3">
                             <span className="text-sm text-gray-500">
-                                {envLabel}
+                                {me.data.username ?? me.data.id.slice(0, 8)} · {envLabel}
                             </span>
                             <button
-                                onClick={signOut}
+                                onClick={async () => {
+                                    await signOut(session).catch(() => {});
+                                    queryClient.setQueryData(meKey(session.env), null);
+                                }}
                                 className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-100"
                             >
                                 <LogOut size={14} />

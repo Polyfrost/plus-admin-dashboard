@@ -3,6 +3,8 @@
  * in the Poly+ API (v1) OpenAPI document.
  */
 
+import { apiFetch } from "@/lib/session";
+
 const ANALYTICS_PREFIX = "/v1/analytics";
 
 /* ------------------------------------------------------------------ types */
@@ -58,12 +60,13 @@ export interface DailyPoint {
     cosmetics_acquired_paid: number;
     cosmetics_acquired_free: number;
     cosmetics_acquired_granted: number;
-    transactions_completed: number;
+    /** Sales counts: null without View revenue. */
+    transactions_completed: number | null;
     /** Sales made that day that were later refunded in full. */
-    transactions_refunded: number;
-    transactions_partially_refunded: number;
-    transactions_charged_back: number;
-    gift_transactions: number;
+    transactions_refunded: number | null;
+    transactions_partially_refunded: number | null;
+    transactions_charged_back: number | null;
+    gift_transactions: number | null;
     friend_requests_sent: number;
     friend_requests_accepted: number;
     friendships_created: number;
@@ -294,17 +297,16 @@ export type QueryParams = Record<string, string | number | null | undefined>;
 
 export async function analyticsGet<T>(
     env: string,
-    password: string,
     path: string,
     params: QueryParams = {},
 ): Promise<T> {
-    const url = new URL(`${ANALYTICS_PREFIX}${path}`, env);
+    const search = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) {
         if (value === null || value === undefined || value === "") continue;
-        url.searchParams.set(key, String(value));
+        search.set(key, String(value));
     }
 
-    const res = await fetch(url, { headers: { Authorization: password } });
+    const res = await apiFetch({ env }, `${ANALYTICS_PREFIX}${path}?${search}`);
     if (!res.ok) {
         const text = await res.text();
         throw new Error(`${res.status} ${text}`.trim());

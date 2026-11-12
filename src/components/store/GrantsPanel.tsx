@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Gift, Search } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
-import { useRequiredSession } from "@/lib/session";
+import { useSession } from "@/lib/session";
 import { adminRequest, cosmeticUnits, useCatalog } from "@/lib/store-api";
 import {
     ErrorBanner,
@@ -30,7 +30,7 @@ interface Receipt {
 }
 
 export function GrantsPanel() {
-    const session = useRequiredSession();
+    const session = useSession();
     const [query, setQuery] = useState("");
     const [player, setPlayer] = useState<ResolvedPlayer | null>(null);
     const [variantId, setVariantId] = useState("");

@@ -337,17 +337,18 @@ function dailyTable(days: DailyPoint[]): TableData {
         ["… paid", (day) => formatNumber(day.cosmetics_acquired_paid)],
         ["… free", (day) => formatNumber(day.cosmetics_acquired_free)],
         ["… granted", (day) => formatNumber(day.cosmetics_acquired_granted)],
-        ["Transactions", (day) => formatNumber(day.transactions_completed)],
-        ["… refunded", (day) => formatNumber(day.transactions_refunded)],
+        // Sales counts come back null without View revenue; dropped below.
+        ["Transactions", (day) => formatNumber(day.transactions_completed ?? 0)],
+        ["… refunded", (day) => formatNumber(day.transactions_refunded ?? 0)],
         [
             "… part refunded",
-            (day) => formatNumber(day.transactions_partially_refunded),
+            (day) => formatNumber(day.transactions_partially_refunded ?? 0),
         ],
         [
             "… charged back",
-            (day) => formatNumber(day.transactions_charged_back),
+            (day) => formatNumber(day.transactions_charged_back ?? 0),
         ],
-        ["Gifts", (day) => formatNumber(day.gift_transactions)],
+        ["Gifts", (day) => formatNumber(day.gift_transactions ?? 0)],
         ["Requests sent", (day) => formatNumber(day.friend_requests_sent)],
         [
             "Requests accepted",
@@ -365,11 +366,16 @@ function dailyTable(days: DailyPoint[]): TableData {
         ["Link hits", (day) => formatNumber(day.tracked_link_hits)],
     ];
 
+    const sales = new Set(["Transactions", "… refunded", "… part refunded", "… charged back", "Gifts"]);
+    const shown = days.some((day) => day.transactions_completed !== null)
+        ? columns
+        : columns.filter(([label]) => !sales.has(label));
+
     return {
-        columns: ["Day", ...columns.map(([label]) => label)],
+        columns: ["Day", ...shown.map(([label]) => label)],
         rows: days.map((day) => [
             formatDayLabel(day.day),
-            ...columns.map(([, read]) => read(day)),
+            ...shown.map(([, read]) => read(day)),
         ]),
     };
 }

@@ -8,17 +8,19 @@ import { TagsPanel } from "@/components/store/TagsPanel";
 import { CollectionsPanel } from "@/components/store/CollectionsPanel";
 import { OrdersPanel } from "@/components/store/OrdersPanel";
 import { GrantsPanel } from "@/components/store/GrantsPanel";
+import { useRequiredMe } from "@/lib/session";
+import { Perm, has } from "@/lib/permissions";
 import { ReferralsPanel } from "@/components/store/ReferralsPanel";
 
 const TABS = [
-    { id: "products", label: "Products", render: () => <ProductsPanel /> },
-    { id: "sales", label: "Sales", render: () => <DiscountsPanel key="sale" kind="sale" /> },
-    { id: "coupons", label: "Coupons", render: () => <DiscountsPanel key="coupon" kind="coupon" /> },
-    { id: "tags", label: "Tags", render: () => <TagsPanel /> },
-    { id: "referrals", label: "Referrals", render: () => <ReferralsPanel /> },
-    { id: "collections", label: "Collections", render: () => <CollectionsPanel /> },
-    { id: "orders", label: "Orders", render: () => <OrdersPanel /> },
-    { id: "grants", label: "Grants", render: () => <GrantsPanel /> },
+    { id: "products", label: "Products", perm: Perm.MANAGE_STORE, render: () => <ProductsPanel /> },
+    { id: "sales", label: "Sales", perm: Perm.MANAGE_DISCOUNTS, render: () => <DiscountsPanel key="sale" kind="sale" /> },
+    { id: "coupons", label: "Coupons", perm: Perm.MANAGE_DISCOUNTS, render: () => <DiscountsPanel key="coupon" kind="coupon" /> },
+    { id: "tags", label: "Tags", perm: Perm.MANAGE_COSMETICS, render: () => <TagsPanel /> },
+    { id: "referrals", label: "Referrals", perm: Perm.MANAGE_REFERRALS, render: () => <ReferralsPanel /> },
+    { id: "collections", label: "Collections", perm: Perm.MANAGE_COSMETICS, render: () => <CollectionsPanel /> },
+    { id: "orders", label: "Orders", perm: Perm.VIEW_ORDERS, render: () => <OrdersPanel /> },
+    { id: "grants", label: "Grants", perm: Perm.GRANT_COSMETICS, render: () => <GrantsPanel /> },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -31,8 +33,10 @@ export const Route = createFileRoute("/store")({
 });
 
 function StoreRoute() {
-    const { tab: active = "products" } = Route.useSearch();
-    const tab = TABS.find((candidate) => candidate.id === active) ?? TABS[0];
+    const { permissions } = useRequiredMe();
+    const tabs = TABS.filter((candidate) => has(permissions, candidate.perm));
+    const { tab: active = tabs[0]?.id } = Route.useSearch();
+    const tab = tabs.find((candidate) => candidate.id === active) ?? tabs[0];
 
     return (
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
@@ -52,7 +56,7 @@ function StoreRoute() {
             </div>
 
             <div className="flex flex-wrap gap-2 border-b border-gray-800">
-                {TABS.map((candidate) => (
+                {tabs.map((candidate) => (
                     <Link
                         key={candidate.id}
                         to="/store"
@@ -68,7 +72,7 @@ function StoreRoute() {
                 ))}
             </div>
 
-            {tab.render()}
+            {tab?.render()}
         </div>
     );
 }
