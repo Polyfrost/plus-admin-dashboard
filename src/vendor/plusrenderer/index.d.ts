@@ -1,5 +1,4 @@
-// Vendored from github.com/Polyfrost/plusrenderer @ 1b8585c (packages/renderer, wasm via
-// scripts/build-wasm.sh). Swap for the release tgz once one is published.
+// Vendored from the github.com/Polyfrost/plusrenderer v1.1.0 release (plusrenderer-renderer-1.1.0.tgz).
 
 type Image = TexImageSource & { width: number; height: number };
 
@@ -15,11 +14,14 @@ export class Renderer {
     loadPlayer(slot: number, slim: boolean): void;
     loadCosmetic(slot: number, json: string, bodySlot: string, image: Image, anchor?: string): void;
     loadCape(slot: number, still: Image, sheet?: Image | null, sheetName?: string): void;
+    loadElytra(slot: number, still: Image, sheet?: Image | null, sheetName?: string): void;
     loadAnimation(slot: number, json: string): void;
     /** Indices into `paths` of [geometry, animation, texture, cape sheet], or -1. */
     bundleParts(paths: string[]): [number, number, number, number];
     play(slot: number, at: number): void;
     stop(slot: number): void;
+    /** `fall` is how steeply it dives, 0..1. */
+    setElytraPose(slot: number, pose: "standing" | "crouching" | "flying", fall?: number): void;
     setVisible(slot: number, visible: boolean): void;
     clear(slot: number): void;
     setTexture(slot: number, image: Image): void;

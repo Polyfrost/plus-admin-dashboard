@@ -60,6 +60,11 @@ export class Renderer {
         this.wasm = wasm;
         this.handle = wasm.renderer_new();
         this.textures = [];
+        // Skips frames that would match the last one. Every state change sets `dirty`.
+        this.dirty = true;
+        this.animating = true;
+        this.lastFrame = "";
+        this.lastStats = { triangles: 0, draws: 0 };
 
         const program = gl.createProgram();
         gl.attachShader(program, compile(gl, gl.VERTEX_SHADER, VERTEX_SHADER));
@@ -127,10 +132,12 @@ export class Renderer {
     // Cosmetics hang off the nearest lower slot with the bone they name, so the player goes lowest.
 
     loadPlayer(slot, slim) {
+        this.dirty = true;
         this.wasm.renderer_load_player(this.handle, slot, slim ? 1 : 0);
     }
 
     loadCosmetic(slot, json, bodySlot, image, anchor = "") {
+        this.dirty = true;
         this.check(this.withStrings([json, bodySlot, anchor], (ptr, len, bodyPtr, bodyLen, anchorPtr, anchorLen) =>
             this.wasm.renderer_load_cosmetic(
                 this.handle, slot, ptr, len, bodyPtr, bodyLen, anchorPtr, anchorLen, image.width, image.height,
@@ -141,16 +148,23 @@ export class Renderer {
 
     // Animates if `sheet` stacks frames of the still's size, and `sheetName` may set the pace.
     loadCape(slot, still, sheet, sheetName = "") {
+        this.loadCapeModel(this.wasm.renderer_load_cape, slot, still, sheet, sheetName);
+    }
+
+    // Vanilla's elytra, drawn with a cape texture or sheet as loadCape takes.
+    loadElytra(slot, still, sheet, sheetName = "") {
+        this.loadCapeModel(this.wasm.renderer_load_elytra, slot, still, sheet, sheetName);
+    }
+
+    loadCapeModel(load, slot, still, sheet, sheetName) {
         const frames = this.withStrings([sheetName], (ptr, len) =>
-            this.wasm.renderer_load_cape(
-                this.handle, slot, still.width, still.height,
-                sheet?.width ?? 0, sheet?.height ?? 0, ptr, len,
-            ),
+            load(this.handle, slot, still.width, still.height, sheet?.width ?? 0, sheet?.height ?? 0, ptr, len),
         );
         this.setTexture(slot, frames > 1 ? sheet : still);
     }
 
     loadAnimation(slot, json) {
+        this.dirty = true;
         this.check(this.withStrings([json], (ptr, len) =>
             this.wasm.renderer_load_animation(this.handle, slot, ptr, len),
         ));
@@ -164,18 +178,27 @@ export class Renderer {
     }
 
     play(slot, at) {
+        this.dirty = true;
         this.wasm.renderer_play(this.handle, slot, at);
     }
 
     stop(slot) {
+        this.dirty = true;
         this.wasm.renderer_stop(this.handle, slot);
     }
 
+    // "standing" (also swimming), "crouching" or "flying". `fall` is how steeply it dives, 0..1.
+    setElytraPose(slot, pose, fall = 0) {
+        this.wasm.renderer_set_elytra_pose(this.handle, slot, ["standing", "crouching", "flying"].indexOf(pose), fall);
+    }
+
     setVisible(slot, visible) {
+        this.dirty = true;
         this.wasm.renderer_set_visible(this.handle, slot, visible ? 1 : 0);
     }
 
     clear(slot) {
+        this.dirty = true;
         this.wasm.renderer_clear(this.handle, slot);
         if (this.textures[slot]) this.gl.deleteTexture(this.textures[slot]);
         this.textures[slot] = undefined;
@@ -183,10 +206,12 @@ export class Renderer {
 
     // Light level 0..15. Glowing bones stay lit.
     setLightLevel(level) {
+        this.dirty = true;
         this.wasm.renderer_set_light_level(this.handle, level);
     }
 
     setTexture(slot, image) {
+        this.dirty = true;
         const gl = this.gl;
         this.textures[slot] ??= gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, this.textures[slot]);
@@ -213,6 +238,11 @@ export class Renderer {
         const gl = this.gl;
         const [width, height] = this.resize();
 
+        const key = `${camera.yaw},${camera.pitch},${camera.distance},${camera.targetY},${width},${height}`;
+        if (!this.dirty && !this.animating && key === this.lastFrame) return this.lastStats;
+        this.dirty = false;
+        this.lastFrame = key;
+
         const indexCount = this.wasm.renderer_build(
             this.handle,
             camera.yaw,
@@ -223,11 +253,12 @@ export class Renderer {
             height,
             seconds,
         );
+        this.animating = this.wasm.renderer_is_animating(this.handle) !== 0;
 
         gl.viewport(0, 0, width, height);
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
-        if (indexCount <= 0) return { triangles: 0, draws: 0 };
+        if (indexCount <= 0) return (this.lastStats = { triangles: 0, draws: 0 });
 
         const vertexCount = this.wasm.renderer_vertex_count(this.handle);
         const memory = this.memory();
@@ -262,7 +293,7 @@ export class Renderer {
         }
 
         gl.bindVertexArray(null);
-        return { triangles, draws };
+        return (this.lastStats = { triangles, draws });
     }
 
     upload(target, buffer, data) {
