@@ -6,7 +6,17 @@ import {
     useAdminQuery,
     useCatalog,
 } from "@/lib/store-api";
-import { Badge, ErrorBanner, Field, Panel, Table, inputClass, secondaryButton } from "./shared";
+import {
+    Badge,
+    ErrorBanner,
+    Field,
+    Pager,
+    Panel,
+    Table,
+    fromLocalInput,
+    inputClass,
+    secondaryButton,
+} from "./shared";
 
 interface Player {
     uuid: string;
@@ -53,6 +63,17 @@ interface OrdersResponse {
 
 const PAGE_SIZE = 50;
 
+/** Mirrors the backend's `TransactionProvider`. */
+const PROVIDERS: Record<string, string> = {
+    paynow: "PayNow",
+    polyfrost: "free (no checkout)",
+    admin_grant: "admin grant",
+    stripe: "Stripe",
+    ingame: "in game",
+};
+
+const providerLabel = (provider: string) => PROVIDERS[provider] ?? provider;
+
 function PlayerName({ player }: { player: Player | null }) {
     if (!player) return <span className="text-gray-600">—</span>;
     return (
@@ -73,18 +94,63 @@ function StatusBadge({ order }: { order: Order }) {
     return <Badge>{order.status}</Badge>;
 }
 
+const STATUSES = ["completed", "pending", "failed", "refunded", "partially_refunded", "chargeback"];
+
+const SORTS = {
+    newest: "Newest first",
+    oldest: "Oldest first",
+    amount_desc: "Highest amount",
+    amount_asc: "Lowest amount",
+};
+
+interface Filters {
+    player: string;
+    provider: string;
+    status: string;
+    /** Major units, as typed. */
+    min: string;
+    max: string;
+    from: string;
+    to: string;
+    sort: string;
+}
+
+const NO_FILTERS: Filters = {
+    player: "",
+    provider: "",
+    status: "",
+    min: "",
+    max: "",
+    from: "",
+    to: "",
+    sort: "newest",
+};
+
+function ordersQuery(filters: Filters, page: number): string {
+    const params = new URLSearchParams({ page: String(page), nb: String(PAGE_SIZE) });
+    const minor = (major: string) => String(Math.round(Number(major) * 100));
+    if (filters.player.trim()) params.set("player", filters.player.trim());
+    if (filters.provider) params.set("provider", filters.provider);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.min) params.set("min_amount", minor(filters.min));
+    if (filters.max) params.set("max_amount", minor(filters.max));
+    const from = fromLocalInput(filters.from);
+    const to = fromLocalInput(filters.to);
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    if (filters.sort !== "newest") params.set("sort", filters.sort);
+    return params.toString();
+}
+
 export function OrdersPanel() {
-    const [search, setSearch] = useState("");
-    const [player, setPlayer] = useState("");
+    // Edited in the form, applied on Filter so typing doesn't refetch per key.
+    const [draft, setDraft] = useState<Filters>(NO_FILTERS);
+    const [filters, setFilters] = useState<Filters>(NO_FILTERS);
     const [page, setPage] = useState(1);
     const [open, setOpen] = useState<number | null>(null);
+    const set = (patch: Partial<Filters>) => setDraft({ ...draft, ...patch });
 
-    const params = new URLSearchParams({
-        page: String(page),
-        nb: String(PAGE_SIZE),
-    });
-    if (player) params.set("player", player);
-    const orders = useAdminQuery<OrdersResponse>(`/v1/admin/orders?${params}`);
+    const orders = useAdminQuery<OrdersResponse>(`/v1/admin/orders?${ordersQuery(filters, page)}`);
 
     const catalog = useCatalog();
     const names = useMemo(() => {
@@ -110,28 +176,86 @@ export function OrdersPanel() {
     return (
         <Panel
             title="Orders"
-            description="Every transaction, newest first: PayNow purchases, admin grants and older Stripe ones. The player is who received it; the buyer only shows when someone else paid — a gift. Amounts are what was actually charged, after sales and coupons."
+            description="Every transaction, newest first: PayNow purchases, free baskets granted without a checkout, admin grants and older Stripe ones. The player is who received it; the buyer only shows when someone else paid — a gift. Amounts are what was actually charged, after sales and coupons."
         >
             <form
                 onSubmit={(event) => {
                     event.preventDefault();
                     setPage(1);
-                    setPlayer(search.trim());
+                    setFilters(draft);
                 }}
-                className="flex flex-wrap items-end gap-3"
+                className="flex flex-col gap-3 rounded-lg bg-gray-800 p-4 shadow-xl"
             >
-                <Field label="Player" help="UUID or username, as buyer or recipient">
-                    <input
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
-                        placeholder="All players"
-                        className={inputClass}
-                    />
-                </Field>
-                <button type="submit" className={secondaryButton}>
-                    <Search size={14} />
-                    Filter
-                </button>
+                <div className="flex flex-wrap items-end gap-3">
+                    <Field label="Player" help="UUID or username, as buyer or recipient">
+                        <input
+                            value={draft.player}
+                            onChange={(event) => set({ player: event.target.value })}
+                            placeholder="All players"
+                            className={inputClass}
+                        />
+                    </Field>
+                    <Field label="Provider">
+                        <select value={draft.provider} onChange={(event) => set({ provider: event.target.value })} className={inputClass}>
+                            <option value="">Any</option>
+                            {Object.entries(PROVIDERS).map(([value, label]) => (
+                                <option key={value} value={value}>
+                                    {label}
+                                </option>
+                            ))}
+                        </select>
+                    </Field>
+                    <Field label="Status">
+                        <select value={draft.status} onChange={(event) => set({ status: event.target.value })} className={inputClass}>
+                            <option value="">Any</option>
+                            {STATUSES.map((status) => (
+                                <option key={status} value={status}>
+                                    {status.replace("_", " ")}
+                                </option>
+                            ))}
+                        </select>
+                    </Field>
+                    <Field label="Sort">
+                        <select value={draft.sort} onChange={(event) => set({ sort: event.target.value })} className={inputClass}>
+                            {Object.entries(SORTS).map(([value, label]) => (
+                                <option key={value} value={value}>
+                                    {label}
+                                </option>
+                            ))}
+                        </select>
+                    </Field>
+                </div>
+                <div className="flex flex-wrap items-end gap-3">
+                    <Field label="Charged at least" help="Major units, any currency">
+                        <input type="number" min={0} step="0.01" value={draft.min} onChange={(event) => set({ min: event.target.value })} className={inputClass} />
+                    </Field>
+                    <Field label="Charged at most" help="Orders without an amount drop out">
+                        <input type="number" min={0} step="0.01" value={draft.max} onChange={(event) => set({ max: event.target.value })} className={inputClass} />
+                    </Field>
+                    <Field label="From">
+                        <input type="datetime-local" value={draft.from} onChange={(event) => set({ from: event.target.value })} className={inputClass} />
+                    </Field>
+                    <Field label="Until">
+                        <input type="datetime-local" value={draft.to} onChange={(event) => set({ to: event.target.value })} className={inputClass} />
+                    </Field>
+                </div>
+                <div className="flex gap-3">
+                    <button type="submit" className={secondaryButton}>
+                        <Search size={14} />
+                        Filter
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setDraft(NO_FILTERS);
+                            setFilters(NO_FILTERS);
+                            setPage(1);
+                        }}
+                        className={secondaryButton}
+                    >
+                        Clear
+                    </button>
+                </div>
             </form>
 
             <ErrorBanner error={orders.error} />
@@ -200,7 +324,7 @@ export function OrdersPanel() {
                                     <StatusBadge order={order} />
                                 </td>
                                 <td className="px-4 py-3 text-gray-500">
-                                    {order.provider.replace("_", " ")}
+                                    {providerLabel(order.provider)}
                                 </td>
                             </tr>
                             {expanded && (
@@ -215,26 +339,12 @@ export function OrdersPanel() {
                 })}
             </Table>
 
-            {orders.data && orders.data.total_pages > 1 && (
-                <div className="flex items-center gap-3 text-sm text-gray-400">
-                    <button
-                        onClick={() => setPage(page - 1)}
-                        disabled={page <= 1}
-                        className={secondaryButton}
-                    >
-                        Previous
-                    </button>
-                    Page {page} of {orders.data.total_pages} ·{" "}
-                    {orders.data.total_items} orders
-                    <button
-                        onClick={() => setPage(page + 1)}
-                        disabled={page >= orders.data.total_pages}
-                        className={secondaryButton}
-                    >
-                        Next
-                    </button>
-                </div>
-            )}
+            <Pager
+                page={page}
+                totalPages={orders.data?.total_pages ?? 1}
+                totalItems={orders.data?.total_items}
+                onChange={setPage}
+            />
         </Panel>
     );
 }

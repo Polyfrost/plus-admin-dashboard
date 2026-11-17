@@ -236,6 +236,23 @@ export function CheckList<K extends string | number>({
     );
 }
 
+/** A small cover image; an animated preview plays on hover when there is one. */
+export function Thumb({ cover, preview }: { cover: string | null | undefined; preview?: string | null }) {
+    return (
+        <div className="group relative h-12 w-12 shrink-0 overflow-hidden rounded bg-gray-900">
+            {cover && <img src={cover} alt="" loading="lazy" className="h-full w-full object-contain" />}
+            {preview && (
+                <img
+                    src={preview}
+                    alt=""
+                    loading="lazy"
+                    className="absolute inset-0 hidden h-full w-full object-contain group-hover:block"
+                />
+            )}
+        </div>
+    );
+}
+
 export function Badge({
     tone = "gray",
     children,
@@ -256,6 +273,41 @@ export function Badge({
         >
             {children}
         </span>
+    );
+}
+
+/** Previous / next for a 1-indexed page; hidden when everything fits on one. */
+export function Pager({
+    page,
+    totalPages,
+    totalItems,
+    onChange,
+}: {
+    page: number;
+    totalPages: number;
+    totalItems?: number;
+    onChange: (page: number) => void;
+}) {
+    if (totalPages <= 1) return null;
+    return (
+        <div className="flex items-center gap-3 text-sm text-gray-400">
+            <button
+                onClick={() => onChange(page - 1)}
+                disabled={page <= 1}
+                className={secondaryButton}
+            >
+                Previous
+            </button>
+            Page {page} of {totalPages}
+            {totalItems !== undefined && ` · ${totalItems} total`}
+            <button
+                onClick={() => onChange(page + 1)}
+                disabled={page >= totalPages}
+                className={secondaryButton}
+            >
+                Next
+            </button>
+        </div>
     );
 }
 

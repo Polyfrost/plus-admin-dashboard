@@ -11,6 +11,7 @@ import {
     FolderUp,
     ImageUp,
     Plus,
+    RefreshCw,
     Save,
     Shirt,
     Trash2,
@@ -174,6 +175,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
     const [drafts, setDrafts] = useState<Draft[]>([newDraft()]);
     const [previewKey, setPreviewKey] = useState(drafts[0].key);
     const [states, setStates] = useState<Record<string, UploadState>>({});
+    const [coverSeconds, setCoverSeconds] = useState<number | null>(null);
     const create = useCreateCosmetic();
 
     const isEmote = type === "emote";
@@ -207,6 +209,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                 form.append("type", type!);
                 form.append("name", name.trim());
                 if (description.trim()) form.append("description", description.trim());
+                if (coverSeconds !== null) form.append("cover_seconds", String(coverSeconds));
                 for (const slot of isEmote ? [] : slots) form.append("slots", slot);
                 if (grouped) {
                     form.append("group", name.trim());
@@ -425,7 +428,9 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                                 type={type}
                                 bodySlot={slots[0] ?? previewSlot(type)}
                                 className="h-96 w-full"
+                                frozenAt={coverSeconds}
                             />
+                            <FramePicker value={coverSeconds} onChange={setCoverSeconds} />
                         </div>
                     </div>
                 </Step>
@@ -652,9 +657,17 @@ function CosmeticGrid() {
                             unit.enabled ? "" : "opacity-60"
                         }`}
                     >
-                        <div className="aspect-square bg-gray-900">
+                        <div className="group relative aspect-square bg-gray-900">
                             {unit.cover_url && (
                                 <img src={unit.cover_url} alt="" loading="lazy" className="h-full w-full object-contain" />
+                            )}
+                            {unit.preview_url && (
+                                <img
+                                    src={unit.preview_url}
+                                    alt=""
+                                    loading="lazy"
+                                    className="absolute inset-0 hidden h-full w-full object-contain group-hover:block"
+                                />
                             )}
                         </div>
                         <div className="flex flex-col gap-1 p-3">
@@ -804,6 +817,17 @@ function AddVariantForm({ unit }: { unit: CosmeticUnit }) {
 function UnitPreview({ unit }: { unit: CosmeticUnit }) {
     const [variantId, setVariantId] = useState(unit.first.id);
     const variant = unit.variants.find((v) => v.id === variantId) ?? unit.first;
+    const [coverSeconds, setCoverSeconds] = useState<number | null>(null);
+
+    const render = useAdminMutation<void>(() => ({
+        method: "POST",
+        path: "/cosmetics/manage/render-cover",
+        body: {
+            cosmetic_id: variant.id,
+            force: true,
+            ...(coverSeconds !== null && { cover_seconds: coverSeconds }),
+        },
+    }));
 
     return (
         <div className="flex flex-col gap-2">
@@ -819,7 +843,73 @@ function UnitPreview({ unit }: { unit: CosmeticUnit }) {
             ) : (
                 <span className="text-sm text-gray-400">Preview</span>
             )}
-            <CosmeticPreview source={variant.url} type={unit.type} bodySlot={previewSlot(unit.type)} />
+            <CosmeticPreview
+                source={variant.url}
+                type={unit.type}
+                bodySlot={previewSlot(unit.type)}
+                frozenAt={coverSeconds}
+            />
+
+            <div className="mt-4 font-semibold text-gray-300">Cover</div>
+            <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
+                <figure className="flex flex-col gap-1">
+                    <div className="aspect-square rounded bg-gray-900">
+                        {variant.cover_url && (
+                            <img src={variant.cover_url} alt="Cover" className="h-full w-full object-contain" />
+                        )}
+                    </div>
+                    <figcaption>{variant.cover_url ? "Cover" : "No cover"}</figcaption>
+                </figure>
+                <figure className="flex flex-col gap-1">
+                    <div className="aspect-square rounded bg-gray-900">
+                        {variant.preview_url && (
+                            <img src={variant.preview_url} alt="Animated preview" className="h-full w-full object-contain" />
+                        )}
+                    </div>
+                    <figcaption>{variant.preview_url ? "Animated preview" : "Doesn't move"}</figcaption>
+                </figure>
+            </div>
+            <FramePicker value={coverSeconds} onChange={setCoverSeconds} />
+            <ErrorBanner error={render.error} />
+            {render.isSuccess && <p className="text-sm text-green-300">Cover re-rendered.</p>}
+            <button onClick={() => render.mutate()} disabled={render.isPending} className={secondaryButton}>
+                <RefreshCw size={16} className={render.isPending ? "animate-spin" : ""} />
+                {render.isPending ? "Rendering…" : "Regenerate cover"}
+            </button>
+        </div>
+    );
+}
+
+/** Seconds into the animation the cover is captured at; holds the live preview there. */
+function FramePicker({ value, onChange }: { value: number | null; onChange: (value: number | null) => void }) {
+    return (
+        <div className="flex flex-col gap-1 text-sm text-gray-400">
+            <label className="flex items-center gap-2">
+                <input
+                    type="checkbox"
+                    checked={value !== null}
+                    onChange={(event) => onChange(event.target.checked ? 1 : null)}
+                    className="accent-[#61dafb]"
+                />
+                Pick the cover frame
+            </label>
+            {value !== null && (
+                <div className="flex items-center gap-2">
+                    <input
+                        type="range"
+                        min={0}
+                        max={8}
+                        step={0.05}
+                        value={value}
+                        onChange={(event) => onChange(Number(event.target.value))}
+                        className="flex-1 accent-[#61dafb]"
+                    />
+                    <span className="w-12 text-right font-mono text-xs">{value.toFixed(2)}s</span>
+                </div>
+            )}
+            <span className="text-xs text-gray-600">
+                For emotes and animated cosmetics. Without it the cover is taken 1s in.
+            </span>
         </div>
     );
 }

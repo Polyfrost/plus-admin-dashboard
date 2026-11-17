@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { Plus, Shield, UserPlus } from "lucide-react";
-import { adminRequest, useAdminMutation, useAdminQuery } from "@/lib/store-api";
+import { adminRequest, useAdminMutation, useAdminQuery, usePagedQuery } from "@/lib/store-api";
 import { useSession, type Role } from "@/lib/session";
 import { toHex } from "@/lib/permissions";
 import {
@@ -9,6 +9,7 @@ import {
     PermissionPicker,
     ErrorBanner,
     Field,
+    Pager,
     Panel,
     inputClass,
     primaryButton,
@@ -192,7 +193,7 @@ const UUID = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$
 
 function Members({ role }: { role: Role }) {
     const session = useSession();
-    const members = useAdminQuery<Member[]>(`/v1/roles/${role.id}/members`);
+    const members = usePagedQuery<Member>(`/v1/roles/${role.id}/members`);
     const [player, setPlayer] = useState("");
 
     const assign = useAdminMutation(async (input: string) => {
@@ -246,10 +247,10 @@ function Members({ role }: { role: Role }) {
             <ErrorBanner error={members.error ?? assign.error ?? unassign.error} />
 
             <ul className="flex flex-col divide-y divide-gray-800 rounded border border-gray-800">
-                {members.data?.length === 0 && (
+                {members.data?.items.length === 0 && (
                     <li className="px-4 py-3 text-sm text-gray-500">Nobody yet.</li>
                 )}
-                {members.data?.map((member) => (
+                {members.data?.items.map((member) => (
                     <li key={member.id} className="flex items-center gap-3 px-4 py-2 text-sm">
                         <span className="text-gray-200">{member.username ?? "Unknown"}</span>
                         <span className="flex-1 font-mono text-xs text-gray-500">{member.id}</span>
@@ -260,6 +261,12 @@ function Members({ role }: { role: Role }) {
                     </li>
                 ))}
             </ul>
+            <Pager
+                page={members.page}
+                totalPages={members.data?.total_pages ?? 1}
+                totalItems={members.data?.total_items}
+                onChange={members.setPage}
+            />
         </Panel>
     );
 }

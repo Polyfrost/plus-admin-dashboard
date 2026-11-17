@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { KeyRound, Plus } from "lucide-react";
-import { useAdminMutation, useAdminQuery } from "@/lib/store-api";
+import { useAdminMutation, usePagedQuery } from "@/lib/store-api";
 import { useRequiredMe } from "@/lib/session";
 import { KEY_FORBIDDEN, PERMISSIONS, Perm, has, permissionLabels } from "@/lib/permissions";
 import {
@@ -10,6 +10,7 @@ import {
     PermissionPicker,
     ErrorBanner,
     Field,
+    Pager,
     Panel,
     Table,
     inputClass,
@@ -31,7 +32,7 @@ interface TokenInfo {
 }
 
 function Tokens() {
-    const tokens = useAdminQuery<TokenInfo[]>("/v1/tokens");
+    const tokens = usePagedQuery<TokenInfo>("/v1/tokens");
     const revoke = useAdminMutation<number>((id) => ({
         method: "DELETE",
         path: `/v1/tokens/${id}`,
@@ -51,9 +52,9 @@ function Tokens() {
                 <ErrorBanner error={tokens.error ?? revoke.error} />
                 <Table
                     headers={["Label", "Permissions", "Exempt prefixes", "Created", "Status", ""]}
-                    empty={!tokens.isPending && !tokens.data?.length}
+                    empty={!tokens.isPending && !tokens.data?.items.length}
                 >
-                    {tokens.data?.map((token) => (
+                    {tokens.data?.items.map((token) => (
                         <tr key={token.id}>
                             <td className="px-4 py-3">{token.label}</td>
                             <td className="px-4 py-3 text-xs text-gray-300">
@@ -90,6 +91,12 @@ function Tokens() {
                         </tr>
                     ))}
                 </Table>
+                <Pager
+                    page={tokens.page}
+                    totalPages={tokens.data?.total_pages ?? 1}
+                    totalItems={tokens.data?.total_items}
+                    onChange={tokens.setPage}
+                />
             </Panel>
         </div>
     );

@@ -14,6 +14,8 @@ export const PERMISSIONS = [
     { key: "VIEW_ORDERS", label: "View orders", description: "The order list, with buyers and amounts." },
     { key: "MANAGE_DISCOUNTS", label: "Manage discounts", description: "Sales and coupons." },
     { key: "MANAGE_REFERRALS", label: "Manage referrals", description: "Creator codes." },
+    { key: "MANAGE_EVENTS", label: "Manage events", description: "Daily reward events and their claims." },
+    { key: "ACT_AS_DELEGATE", label: "Act as delegate", description: "Read and answer the chats of players who delegated them to you." },
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number]["key"];
@@ -63,7 +65,9 @@ export const PAGES = [
             Perm.MANAGE_REFERRALS,
     },
     { to: "/tokens", label: "Tokens", perm: Perm.MANAGE_API_TOKENS },
-    { to: "/chat", label: "Chat", perm: Perm.USE_SPECIAL_CHAT },
+    { to: "/chat", label: "Chat", perm: Perm.USE_SPECIAL_CHAT | Perm.ACT_AS_DELEGATE },
     { to: "/linking", label: "Linking", perm: Perm.VIEW_PLAYERS },
+    { to: "/events", label: "Events", perm: Perm.MANAGE_EVENTS },
     { to: "/roles", label: "Roles", perm: Perm.MANAGE_ROLES },
+    { to: "/settings", label: "Settings", perm: Perm.ADMINISTRATOR },
 ] as const;

@@ -11,6 +11,8 @@ import {
     ExternalLink,
 } from "lucide-react";
 import { apiFetch, useSession } from "@/lib/session";
+import type { Paged } from "@/lib/store-api";
+import { Pager } from "@/components/store/shared";
 
 export const Route = createFileRoute("/links")({
     component: Links,
@@ -24,9 +26,6 @@ interface TrackedLink {
     referral: string | null;
 }
 
-interface ListResponse {
-    links: TrackedLink[];
-}
 
 function api(env: string, path: string, init: RequestInit = {}): Promise<Response> {
     return apiFetch({ env }, path, {
@@ -70,19 +69,21 @@ function Links() {
     const [referral, setReferral] = useState("");
     const [formError, setFormError] = useState<string | null>(null);
 
-    const listKey = ["links", env] as const;
+    // 0 until the first Load press; the list is manual.
+    const [page, setPage] = useState(0);
+    const listKey = ["links", env, page] as const;
 
-    const { data, isFetching, error, refetch } = useQuery<ListResponse>({
+    const { data, isFetching, error, refetch } = useQuery<Paged<TrackedLink>>({
         queryKey: listKey,
         queryFn: async () => {
-            const res = await api(env, "/links");
+            const res = await api(env, `/links?page=${Math.max(page, 1)}&nb=50`);
             if (!res.ok) {
                 const text = await res.text();
                 throw new Error(`${res.status} ${text}`.trim());
             }
             return res.json();
         },
-        enabled: false,
+        enabled: page > 0,
     });
 
     const createMutation = useMutation({
@@ -128,7 +129,7 @@ function Links() {
         onSuccess: () => void refetch(),
     });
 
-    const links = data?.links ?? [];
+    const links = data?.items ?? [];
 
     return (
         <div className="p-6 flex flex-col gap-6 max-w-5xl mx-auto w-full">
@@ -139,7 +140,7 @@ function Links() {
                 </h1>
                 <div className="flex items-center gap-2 flex-wrap">
                     <button
-                        onClick={() => refetch()}
+                        onClick={() => (page ? refetch() : setPage(1))}
                         disabled={isFetching}
                         className="flex items-center gap-2 bg-[#61dafb] text-gray-900 font-semibold px-4 py-2 rounded disabled:opacity-50"
                     >
@@ -295,6 +296,12 @@ function Links() {
                     </table>
                 </div>
             )}
+            <Pager
+                page={page}
+                totalPages={data?.total_pages ?? 1}
+                totalItems={data?.total_items}
+                onChange={setPage}
+            />
         </div>
     );
 }

@@ -11,9 +11,11 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TokensRouteImport } from './routes/tokens'
 import { Route as StoreRouteImport } from './routes/store'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RolesRouteImport } from './routes/roles'
 import { Route as LinksRouteImport } from './routes/links'
 import { Route as LinkingRouteImport } from './routes/linking'
+import { Route as EventsRouteImport } from './routes/events'
 import { Route as CosmeticsRouteImport } from './routes/cosmetics'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
@@ -29,6 +31,11 @@ const StoreRoute = StoreRouteImport.update({
   path: '/store',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RolesRoute = RolesRouteImport.update({
   id: '/roles',
   path: '/roles',
@@ -42,6 +49,11 @@ const LinksRoute = LinksRouteImport.update({
 const LinkingRoute = LinkingRouteImport.update({
   id: '/linking',
   path: '/linking',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EventsRoute = EventsRouteImport.update({
+  id: '/events',
+  path: '/events',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CosmeticsRoute = CosmeticsRouteImport.update({
@@ -70,9 +82,11 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AnalyticsRoute
   '/chat': typeof ChatRoute
   '/cosmetics': typeof CosmeticsRoute
+  '/events': typeof EventsRoute
   '/linking': typeof LinkingRoute
   '/links': typeof LinksRoute
   '/roles': typeof RolesRoute
+  '/settings': typeof SettingsRoute
   '/store': typeof StoreRoute
   '/tokens': typeof TokensRoute
 }
@@ -81,9 +95,11 @@ export interface FileRoutesByTo {
   '/analytics': typeof AnalyticsRoute
   '/chat': typeof ChatRoute
   '/cosmetics': typeof CosmeticsRoute
+  '/events': typeof EventsRoute
   '/linking': typeof LinkingRoute
   '/links': typeof LinksRoute
   '/roles': typeof RolesRoute
+  '/settings': typeof SettingsRoute
   '/store': typeof StoreRoute
   '/tokens': typeof TokensRoute
 }
@@ -93,9 +109,11 @@ export interface FileRoutesById {
   '/analytics': typeof AnalyticsRoute
   '/chat': typeof ChatRoute
   '/cosmetics': typeof CosmeticsRoute
+  '/events': typeof EventsRoute
   '/linking': typeof LinkingRoute
   '/links': typeof LinksRoute
   '/roles': typeof RolesRoute
+  '/settings': typeof SettingsRoute
   '/store': typeof StoreRoute
   '/tokens': typeof TokensRoute
 }
@@ -106,9 +124,11 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/chat'
     | '/cosmetics'
+    | '/events'
     | '/linking'
     | '/links'
     | '/roles'
+    | '/settings'
     | '/store'
     | '/tokens'
   fileRoutesByTo: FileRoutesByTo
@@ -117,9 +137,11 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/chat'
     | '/cosmetics'
+    | '/events'
     | '/linking'
     | '/links'
     | '/roles'
+    | '/settings'
     | '/store'
     | '/tokens'
   id:
@@ -128,9 +150,11 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/chat'
     | '/cosmetics'
+    | '/events'
     | '/linking'
     | '/links'
     | '/roles'
+    | '/settings'
     | '/store'
     | '/tokens'
   fileRoutesById: FileRoutesById
@@ -140,9 +164,11 @@ export interface RootRouteChildren {
   AnalyticsRoute: typeof AnalyticsRoute
   ChatRoute: typeof ChatRoute
   CosmeticsRoute: typeof CosmeticsRoute
+  EventsRoute: typeof EventsRoute
   LinkingRoute: typeof LinkingRoute
   LinksRoute: typeof LinksRoute
   RolesRoute: typeof RolesRoute
+  SettingsRoute: typeof SettingsRoute
   StoreRoute: typeof StoreRoute
   TokensRoute: typeof TokensRoute
 }
@@ -161,6 +187,13 @@ declare module '@tanstack/react-router' {
       path: '/store'
       fullPath: '/store'
       preLoaderRoute: typeof StoreRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/roles': {
@@ -182,6 +215,13 @@ declare module '@tanstack/react-router' {
       path: '/linking'
       fullPath: '/linking'
       preLoaderRoute: typeof LinkingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/events': {
+      id: '/events'
+      path: '/events'
+      fullPath: '/events'
+      preLoaderRoute: typeof EventsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/cosmetics': {
@@ -220,9 +260,11 @@ const rootRouteChildren: RootRouteChildren = {
   AnalyticsRoute: AnalyticsRoute,
   ChatRoute: ChatRoute,
   CosmeticsRoute: CosmeticsRoute,
+  EventsRoute: EventsRoute,
   LinkingRoute: LinkingRoute,
   LinksRoute: LinksRoute,
   RolesRoute: RolesRoute,
+  SettingsRoute: SettingsRoute,
   StoreRoute: StoreRoute,
   TokensRoute: TokensRoute,
 }

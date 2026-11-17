@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { Pencil, Plus, Save, X } from "lucide-react";
+import { useSession } from "@/lib/session";
 import {
+    assetUrl,
     cosmeticUnits,
     useAdminMutation,
     useCatalog,
@@ -44,7 +46,7 @@ export function CollectionsPanel() {
             <CollectionForm />
             <ErrorBanner error={collections.error ?? remove.error} />
             <Table
-                headers={["Collection", "Description", "Products", ""]}
+                headers={["", "Collection", "Description", "Products", ""]}
                 empty={!collections.isPending && !collections.data?.collections.length}
             >
                 {collections.data?.collections.map((collection) => {
@@ -89,9 +91,16 @@ function CollectionRow({
     pending: boolean;
     onDelete: () => void;
 }) {
+    const { env } = useSession();
+    const image = assetUrl(env, collection.asset_id);
     return (
         <>
             <tr>
+                <td className="w-20 py-2 pl-4">
+                    <div className="h-14 w-14 overflow-hidden rounded bg-gray-900">
+                        {image && <img src={image} alt="" loading="lazy" className="h-full w-full object-cover" />}
+                    </div>
+                </td>
                 <td className="px-4 py-3">{collection.name}</td>
                 <td className="max-w-xs truncate px-4 py-3 text-gray-500">
                     {collection.description ?? "—"}
@@ -112,7 +121,7 @@ function CollectionRow({
             </tr>
             {open && (
                 <tr>
-                    <td colSpan={4} className="bg-gray-900/40 px-4 py-4">
+                    <td colSpan={5} className="bg-gray-900/40 px-4 py-4">
                         <CollectionForm initial={collection} />
                     </td>
                 </tr>
@@ -128,6 +137,9 @@ function CollectionForm({ initial }: { initial?: Collection }) {
     const [cover, setCover] = useState<File | null>(null);
     // Remount the file input after a save so it forgets the old pick.
     const [fileKey, setFileKey] = useState(0);
+    const { env } = useSession();
+    const [picked, setPicked] = useState<string>();
+    const shown = picked ?? assetUrl(env, initial?.asset_id);
 
     const save = useAdminMutation<void>(() => {
         const form = new FormData();
@@ -146,6 +158,7 @@ function CollectionForm({ initial }: { initial?: Collection }) {
                 save.mutate(undefined, {
                     onSuccess: () => {
                         setCover(null);
+                        setPicked(undefined);
                         setFileKey(fileKey + 1);
                         if (!initial) {
                             setName("");
@@ -181,12 +194,18 @@ function CollectionForm({ initial }: { initial?: Collection }) {
                         key={fileKey}
                         type="file"
                         accept="image/*"
-                        onChange={(event) =>
-                            setCover(event.target.files?.[0] ?? null)
-                        }
+                        onChange={(event) => {
+                            const file = event.target.files?.[0] ?? null;
+                            setCover(file);
+                            if (picked) URL.revokeObjectURL(picked);
+                            setPicked(file ? URL.createObjectURL(file) : undefined);
+                        }}
                         className={inputClass}
                     />
                 </Field>
+                {shown && (
+                    <img src={shown} alt="Collection image" className="h-24 w-24 rounded bg-gray-900 object-cover" />
+                )}
             </div>
             <Field
                 label="Description"

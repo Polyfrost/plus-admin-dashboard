@@ -12,6 +12,8 @@ const ENV_KEY = "plus-admin-env";
 export interface Session {
     env: string;
     bearer?: string;
+    /** Chat routes only: act as a player who made the signed-in one their delegate. */
+    actAs?: string;
 }
 
 export interface Role {
@@ -70,6 +72,7 @@ export function apiFetch(
             ...(session.bearer && {
                 Authorization: `Bearer ${session.bearer}`,
             }),
+            ...(session.actAs && { "x-polyplus-act-as": session.actAs }),
             ...init.headers,
         },
     });

@@ -1,11 +1,18 @@
 import { useState } from "react";
 import { Pencil, Plus, Save, X } from "lucide-react";
-import { formatMinor, useAdminMutation, useAdminQuery } from "@/lib/store-api";
+import {
+    formatMinor,
+    useAdminMutation,
+    useAdminQuery,
+    usePagedQuery,
+    type Paged,
+} from "@/lib/store-api";
 import {
     Badge,
     DeleteButton,
     ErrorBanner,
     Field,
+    Pager,
     Panel,
     Table,
     Toggle,
@@ -32,8 +39,9 @@ interface Coupon {
 }
 
 export function ReferralsPanel() {
-    const referrals = useAdminQuery<Referral[]>("/v1/admin/referrals");
-    const coupons = useAdminQuery<Coupon[]>("/v1/admin/discounts?kind=coupon");
+    const referrals = usePagedQuery<Referral>("/v1/admin/referrals");
+    // ponytail: only the newest 100 coupons are offered and named here; add a coupon search if that runs out.
+    const coupons = useAdminQuery<Paged<Coupon>>("/v1/admin/discounts?kind=coupon&nb=100");
     const [editing, setEditing] = useState<string | null>(null);
 
     const remove = useAdminMutation<string>((code) => ({
@@ -43,7 +51,7 @@ export function ReferralsPanel() {
 
     const couponName = (id: number | null) => {
         if (id === null) return "—";
-        const coupon = coupons.data?.find((c) => c.id === id);
+        const coupon = coupons.data?.items.find((c) => c.id === id);
         return coupon ? `${coupon.name} (${coupon.code})` : `#${id}`;
     };
 
@@ -52,20 +60,20 @@ export function ReferralsPanel() {
             title="Referrals"
             description="Creator codes buyers pass to checkout. A linked coupon applies by itself whenever the code is used. Point a tracked link (Links page) at a code to count its clicks here."
         >
-            <ReferralForm coupons={coupons.data ?? []} />
+            <ReferralForm coupons={coupons.data?.items ?? []} />
             <ErrorBanner error={referrals.error ?? remove.error} />
             <Table
                 headers={["Code", "Owner", "Coupon", "Orders", "Revenue", "Clicks", "Status", ""]}
-                empty={!referrals.isPending && !referrals.data?.length}
+                empty={!referrals.isPending && !referrals.data?.items.length}
             >
-                {referrals.data?.map((referral) => {
+                {referrals.data?.items.map((referral) => {
                     const open = editing === referral.code;
                     return (
                         <ReferralRow
                             key={referral.code}
                             referral={referral}
                             coupon={couponName(referral.discount_id)}
-                            coupons={coupons.data ?? []}
+                            coupons={coupons.data?.items ?? []}
                             open={open}
                             onToggle={() => setEditing(open ? null : referral.code)}
                             pending={remove.isPending}
@@ -82,6 +90,12 @@ export function ReferralsPanel() {
                     );
                 })}
             </Table>
+            <Pager
+                page={referrals.page}
+                totalPages={referrals.data?.total_pages ?? 1}
+                totalItems={referrals.data?.total_items}
+                onChange={referrals.setPage}
+            />
         </Panel>
     );
 }

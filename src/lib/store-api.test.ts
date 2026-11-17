@@ -17,6 +17,7 @@ const cosmetic = (over: Partial<CatalogCosmetic>): CatalogCosmetic => ({
     purchase_count: 0,
     url: null,
     cover_url: null,
+    preview_url: null,
     tag_ids: [],
     created_at: "",
     ...over,

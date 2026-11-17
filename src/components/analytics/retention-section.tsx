@@ -35,7 +35,7 @@ export function RetentionSection({
         <Section
             id="retention"
             title="Signup cohort retention"
-            description="For every signup day, how many of that day's accounts played again N days later. A blank cell means the offset has not elapsed yet for that cohort — not that nobody came back."
+            description="For every signup day, how many of that day's accounts played again N days later. Accounts that never logged in are left out. A blank cell means the offset has not elapsed yet for that cohort — not that nobody came back."
         >
             <SectionBody query={query} what="retention">
                 {(data, dimmed) => {

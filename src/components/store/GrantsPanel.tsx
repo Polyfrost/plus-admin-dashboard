@@ -1,15 +1,18 @@
 import { useMemo, useState } from "react";
-import { Gift, Search } from "lucide-react";
+import { Gift, Undo2 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { useSession } from "@/lib/session";
 import { adminRequest, cosmeticUnits, useCatalog } from "@/lib/store-api";
 import {
+    CheckList,
     ErrorBanner,
     Field,
     Panel,
     PayloadPreview,
     Table,
     inputClass,
+    primaryButton,
+    secondaryButton,
 } from "./shared";
 
 interface ResolvedPlayer {
@@ -18,200 +21,179 @@ interface ResolvedPlayer {
     username?: string;
 }
 
-interface GrantResponse {
-    granted: number[];
+/** What one request did, kept for the session so the page shows its own history. */
+interface Receipt {
+    action: "Granted" | "Removed";
+    players: ResolvedPlayer[];
+    cosmetics: string[];
+    /** Cosmetic ids the backend reports, groups expanded. */
+    count: number;
 }
 
-/** What one grant did, kept for the session so the page shows its own history. */
-interface Receipt {
-    player: ResolvedPlayer;
-    cosmetic: string;
-    granted: number[];
-}
+const MAX_PLAYERS = 500;
+const MAX_COSMETICS = 100;
 
 export function GrantsPanel() {
     const session = useSession();
-    const [query, setQuery] = useState("");
-    const [player, setPlayer] = useState<ResolvedPlayer | null>(null);
-    const [variantId, setVariantId] = useState("");
+    const [players, setPlayers] = useState("");
+    const [picked, setPicked] = useState<number[]>([]);
     const [receipts, setReceipts] = useState<Receipt[]>([]);
 
     const catalog = useCatalog();
-    // Grants go by variant id, and any variant grants its whole group.
-    const cosmetics = useMemo(() => cosmeticUnits(catalog.data), [catalog.data]);
+    // Grants go by variant id, and any variant stands for its whole group.
+    const units = useMemo(() => cosmeticUnits(catalog.data), [catalog.data]);
+    const names = new Map(units.map((unit) => [unit.first.id, unit.name]));
 
-    const selected = cosmetics.find(
-        (cosmetic) => String(cosmetic.first.id) === variantId,
-    );
+    const queries = [
+        ...new Set(
+            players
+                .split(/[\s,]+/)
+                .map((line) => line.trim())
+                .filter(Boolean),
+        ),
+    ];
 
-    const resolve = useMutation({
-        mutationFn: () =>
-            adminRequest(
-                session,
-                "GET",
-                `/v1/admin/grants/player/${encodeURIComponent(query.trim())}`,
-            ) as Promise<ResolvedPlayer>,
-        onSuccess: (resolved) => setPlayer(resolved),
-    });
+    const run = useMutation({
+        mutationFn: async (action: Receipt["action"]) => {
+            // Usernames go through the same lookup a single grant used.
+            const resolved = await Promise.all(
+                queries.map(
+                    (query) =>
+                        adminRequest(
+                            session,
+                            "GET",
+                            `/v1/admin/grants/player/${encodeURIComponent(query)}`,
+                        ) as Promise<ResolvedPlayer>,
+                ),
+            );
+            const body = {
+                players: resolved.map((player) => player.id),
+                cosmetic_ids: picked,
+            };
 
-    const body = {
-        player: player?.id ?? "",
-        cosmetic_id: Number(variantId) || 0,
-    };
-
-    const grant = useMutation({
-        mutationFn: async () => {
-            // Captured here so the receipt describes the grant that was sent,
-            // not whatever the form holds once it comes back.
-            const target = player;
-            const cosmetic = selected;
-            if (!target || !cosmetic) {
-                throw new Error("Pick a player and a cosmetic first.");
+            let count: number;
+            if (action === "Granted") {
+                const result = (await adminRequest(
+                    session,
+                    "POST",
+                    "/v1/admin/grants/bulk",
+                    body,
+                )) as { granted: number[] };
+                count = result.granted.length * resolved.length;
+            } else {
+                const result = (await adminRequest(
+                    session,
+                    "POST",
+                    "/v1/admin/grants/revoke/bulk",
+                    body,
+                )) as { removed: Record<string, number[]> };
+                count = Object.values(result.removed).flat().length;
             }
-
-            const result = (await adminRequest(session, "POST", "/v1/admin/grants", {
-                player: target.id,
-                cosmetic_id: cosmetic.first.id,
-            })) as GrantResponse;
 
             setReceipts((previous) => [
                 {
-                    player: target,
-                    cosmetic: cosmetic.name,
-                    granted: result.granted,
+                    action,
+                    players: resolved,
+                    cosmetics: picked.map((id) => names.get(id) ?? `#${id}`),
+                    count,
                 },
                 ...previous,
             ]);
-
-            return result;
         },
     });
+
+    const tooMany = queries.length > MAX_PLAYERS || picked.length > MAX_COSMETICS;
+    const ready = queries.length > 0 && picked.length > 0 && !tooMany && !run.isPending;
 
     return (
         <Panel
             title="Grants"
-            description="Hands a player a cosmetic for nothing. It books an admin-grant transaction, which is what the Granted column in analytics counts, and pushes the new ownership to the player straight away if they are online. Granting any cosmetic in a group grants the whole group, and nothing here takes a grant back."
+            description="Hands players cosmetics for nothing, or takes them away. A grant books an admin-grant transaction, which is what the Granted column in analytics counts. Removing takes a cosmetic away whatever gave it, paid purchases included, and unequips it. Either way online players see it straight away, and any variant stands for its whole group."
         >
             <form
                 onSubmit={(event) => {
                     event.preventDefault();
-                    // Enter in the player box means "find them" until it has.
-                    if (!player) {
-                        resolve.mutate();
-                        return;
-                    }
-                    grant.mutate();
+                    run.mutate("Granted");
                 }}
                 className="flex flex-col gap-3 rounded-lg bg-gray-800 p-4 shadow-xl"
             >
-                <div className="font-semibold text-gray-300">Grant a cosmetic</div>
-                <div className="flex flex-wrap items-end gap-3">
+                <div className="grid gap-3 md:grid-cols-2">
                     <Field
-                        label="Player"
-                        help="A UUID or a Minecraft username — a name that has never played is looked up at Mojang"
+                        label={`Players (${queries.length})`}
+                        help={`UUIDs or Minecraft usernames, one per line, up to ${MAX_PLAYERS}. A name that has never played is looked up through Mowojang.`}
                     >
-                        <input
-                            value={query}
-                            onChange={(event) => {
-                                setQuery(event.target.value);
-                                // The old answer no longer describes the box.
-                                setPlayer(null);
-                            }}
-                            required
-                            placeholder="Notch"
-                            className={inputClass}
+                        <textarea
+                            value={players}
+                            onChange={(event) => setPlayers(event.target.value)}
+                            rows={8}
+                            placeholder={"Notch\njeb_"}
+                            className={`${inputClass} font-mono text-sm`}
                         />
                     </Field>
-                    <button
-                        type="button"
-                        onClick={() => resolve.mutate()}
-                        disabled={!query.trim() || resolve.isPending}
-                        className="flex items-center gap-2 rounded border border-gray-600 px-4 py-2 text-sm text-gray-300 hover:text-gray-100 disabled:opacity-50"
-                    >
-                        <Search size={14} />
-                        {resolve.isPending ? "Finding…" : "Find player"}
-                    </button>
+                    <Field label="Cosmetics" help={`Up to ${MAX_COSMETICS}`}>
+                        <CheckList
+                            items={units.map((unit) => ({
+                                id: unit.first.id,
+                                label: unit.name,
+                                hint:
+                                    unit.variants.length > 1
+                                        ? `${unit.type} · ${unit.variants.length} variants`
+                                        : unit.type,
+                            }))}
+                            selected={picked}
+                            onChange={setPicked}
+                            empty={
+                                catalog.isPending ? "Loading cosmetics…" : "No cosmetics."
+                            }
+                        />
+                    </Field>
                 </div>
 
-                {player && (
-                    <p className="text-sm text-gray-400">
-                        Granting to{" "}
-                        <span className="text-gray-200">
-                            {player.username ?? "an unnamed player"}
-                        </span>{" "}
-                        <span className="font-mono text-xs text-gray-500">
-                            {player.id}
-                        </span>
-                        {!player.username && " — they have never logged in"}
-                    </p>
-                )}
-
-                <Field
-                    label="Cosmetic"
-                    help={
-                        selected && selected.variants.length > 1
-                            ? `Grants all ${selected.variants.length} variants`
-                            : "Any cosmetic, sold or not"
-                    }
-                >
-                    <select
-                        value={variantId}
-                        onChange={(event) => setVariantId(event.target.value)}
-                        required
-                        disabled={catalog.isPending}
-                        className={inputClass}
-                    >
-                        <option value="">
-                            {catalog.isError
-                                ? "Cosmetics unavailable"
-                                : catalog.isPending
-                                  ? "Loading cosmetics…"
-                                  : "Pick a cosmetic"}
-                        </option>
-                        {cosmetics.map((cosmetic) => (
-                            <option
-                                key={cosmetic.key}
-                                value={cosmetic.first.id}
-                            >
-                                {cosmetic.name} ({cosmetic.type})
-                            </option>
-                        ))}
-                    </select>
-                </Field>
-
-                <PayloadPreview body={body} target="the backend" />
-                <ErrorBanner
-                    error={catalog.error ?? resolve.error ?? grant.error}
+                <PayloadPreview
+                    body={{ players: queries, cosmetic_ids: picked }}
+                    target="the backend (usernames resolved to UUIDs first)"
                 />
+                <ErrorBanner error={catalog.error ?? run.error} />
 
-                <button
-                    type="submit"
-                    disabled={!player || !selected || grant.isPending}
-                    className="flex w-fit items-center gap-2 rounded bg-[#61dafb] px-4 py-2 font-semibold text-gray-900 disabled:opacity-50"
-                >
-                    <Gift size={16} />
-                    {grant.isPending ? "Granting…" : "Grant cosmetic"}
-                </button>
+                <div className="flex gap-3">
+                    <button type="submit" disabled={!ready} className={primaryButton}>
+                        <Gift size={16} />
+                        {run.isPending ? "Working…" : "Grant"}
+                    </button>
+                    <button
+                        type="button"
+                        disabled={!ready}
+                        onClick={() => {
+                            if (
+                                confirm(
+                                    `Remove ${picked.length} cosmetic(s) from ${queries.length} player(s)? Paid purchases are taken too.`,
+                                )
+                            ) {
+                                run.mutate("Removed");
+                            }
+                        }}
+                        className={secondaryButton}
+                    >
+                        <Undo2 size={16} />
+                        Remove
+                    </button>
+                </div>
             </form>
 
-            <Table
-                headers={["Player", "Cosmetic", "Granted"]}
-                empty={!receipts.length}
-            >
+            <Table headers={["Action", "Players", "Cosmetics", "Result"]} empty={!receipts.length}>
                 {receipts.map((receipt, index) => (
-                    <tr key={`${receipt.player.id}-${index}`}>
-                        <td className="px-4 py-3">
-                            {receipt.player.username ?? (
-                                <span className="font-mono text-xs">
-                                    {receipt.player.id}
-                                </span>
-                            )}
+                    <tr key={index}>
+                        <td className="px-4 py-3">{receipt.action}</td>
+                        <td className="max-w-xs truncate px-4 py-3">
+                            {receipt.players
+                                .map((player) => player.username ?? player.id)
+                                .join(", ")}
                         </td>
-                        <td className="px-4 py-3">{receipt.cosmetic}</td>
+                        <td className="max-w-xs truncate px-4 py-3">
+                            {receipt.cosmetics.join(", ")}
+                        </td>
                         <td className="px-4 py-3 text-gray-500">
-                            {receipt.granted.length === 1
-                                ? "1 cosmetic"
-                                : `${receipt.granted.length} cosmetics`}
+                            {receipt.count} ownership{receipt.count === 1 ? "" : "s"}
                         </td>
                     </tr>
                 ))}

@@ -56,12 +56,15 @@ export function CosmeticPreview({
     type,
     bodySlot,
     className = "h-72 w-full",
+    frozenAt = null,
 }: {
     source: PreviewSource | null;
     type: string;
     /** Where a model attaches; ignored for capes and emotes. */
     bodySlot: string;
     className?: string;
+    /** Holds the animation at this many seconds in, as a cover is captured. */
+    frozenAt?: number | null;
 }) {
     const canvas = useRef<HTMLCanvasElement>(null);
     const [renderer, setRenderer] = useState<Renderer | null>(null);
@@ -69,6 +72,10 @@ export function CosmeticPreview({
     const [error, setError] = useState("");
     const yaw = useRef(30);
     const dragging = useRef<number | null>(null);
+    // When the current animation started, on the draw clock; capes run from 0.
+    const started = useRef(0);
+    const frozen = useRef(frozenAt);
+    frozen.current = frozenAt;
 
     useEffect(() => {
         let cancelled = false;
@@ -89,7 +96,9 @@ export function CosmeticPreview({
                 last = ms;
                 created.draw(
                     { yaw: ((yaw.current + 540) % 360) - 180, pitch: 10, distance: 60, targetY: 18 },
-                    ms / 1000,
+                    frozen.current == null
+                        ? ms / 1000
+                        : started.current + frozen.current,
                 );
                 frame = requestAnimationFrame(draw);
             };
@@ -109,6 +118,7 @@ export function CosmeticPreview({
         renderer.loadPlayer(PLAYER, slim);
         renderer.clear(CAPE);
         renderer.clear(COSMETIC);
+        started.current = 0;
         setError("");
         if (!source || (Array.isArray(source) && !source.length)) return;
 
@@ -122,7 +132,8 @@ export function CosmeticPreview({
             if (type === "emote" || (animation && !geometry)) {
                 if (!animation) throw new Error("No animation (.json) in this emote");
                 renderer.loadAnimation(PLAYER, await animation.blob.text());
-                renderer.play(PLAYER, now());
+                started.current = now();
+                renderer.play(PLAYER, started.current);
             } else if (geometry) {
                 if (!texture) throw new Error("A model needs a .geo.json and a .png");
                 renderer.loadCosmetic(
@@ -133,7 +144,8 @@ export function CosmeticPreview({
                 );
                 if (animation) {
                     renderer.loadAnimation(COSMETIC, await animation.blob.text());
-                    renderer.play(COSMETIC, now());
+                    started.current = now();
+                    renderer.play(COSMETIC, started.current);
                 }
             } else if (texture) {
                 renderer.loadCape(

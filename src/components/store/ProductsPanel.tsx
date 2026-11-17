@@ -20,6 +20,7 @@ import {
     Panel,
     PayloadPreview,
     Table,
+    Thumb,
     Toggle,
     fromLocalInput,
     inputClass,
@@ -86,7 +87,7 @@ export function ProductsPanel() {
             )}
 
             <Table
-                headers={["Product", "Contents", "Price", "Status", ""]}
+                headers={["", "Product", "Contents", "Price", "Status", ""]}
                 empty={!catalog.isPending && !products.length}
             >
                 {products.map((product) => {
@@ -115,11 +116,14 @@ export function ProductsPanel() {
                     its own to give it a product.
                 </p>
                 <Table
-                    headers={["Cosmetic", "Type", "Variants", ""]}
+                    headers={["", "Cosmetic", "Type", "Variants", ""]}
                     empty={!unsold.length}
                 >
                     {unsold.map((unit) => (
                         <tr key={unit.key}>
+                            <td className="w-16 py-1 pl-4">
+                                <Thumb cover={unit.cover_url} preview={unit.preview_url} />
+                            </td>
                             <td className="px-4 py-2">
                                 {unit.name}
                                 {!unit.enabled && (
@@ -430,6 +434,13 @@ function ProductRow({
     return (
         <>
             <tr>
+                <td className="w-16 py-1 pl-4">
+                    {product.kind === "bundles" ? (
+                        <Thumb cover={product.bundle.cover_url} />
+                    ) : (
+                        <Thumb cover={product.unit.cover_url} preview={product.unit.preview_url} />
+                    )}
+                </td>
                 <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                         {productName(product)}
@@ -492,7 +503,7 @@ function ProductRow({
             </tr>
             {(open || remove.error || render.error) && (
                 <tr>
-                    <td colSpan={5} className="bg-gray-900/40 px-4 py-4">
+                    <td colSpan={6} className="bg-gray-900/40 px-4 py-4">
                         <ErrorBanner error={remove.error ?? render.error} />
                         {open && (
                             <div className="flex flex-col gap-6">

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, useSession, type Session } from "@/lib/session";
 
@@ -48,6 +49,21 @@ export function useAdminQuery<T>(path: string, enabled = true) {
     });
 }
 
+/** The backend's `NumberedPage`, answered by lists paged with `page` and `nb`. */
+export interface Paged<T> {
+    items: T[];
+    total_items: number;
+    total_pages: number;
+}
+
+/** A paged list plus the page it is on; feed `page`/`setPage` to `<Pager>`. */
+export function usePagedQuery<T>(path: string, size = 50) {
+    const [page, setPage] = useState(1);
+    const separator = path.includes("?") ? "&" : "?";
+    const query = useAdminQuery<Paged<T>>(`${path}${separator}page=${page}&nb=${size}`);
+    return { ...query, page, setPage };
+}
+
 /**
  * Runs a write and refreshes every store query: a price change shows in the
  * catalogue, a discount in the product list, a grant in orders. Refreshes on
@@ -93,6 +109,8 @@ export interface CatalogCosmetic {
     purchase_count: number;
     url: string | null;
     cover_url: string | null;
+    /** Looping animated webp, for cosmetics that move. */
+    preview_url: string | null;
     tag_ids: number[];
     created_at: string;
 }
@@ -143,6 +161,7 @@ export interface CosmeticUnit {
     collection: number | null;
     description: string | null;
     cover_url: string | null;
+    preview_url: string | null;
 }
 
 export function cosmeticUnits(catalog: Catalog | undefined): CosmeticUnit[] {
@@ -178,6 +197,7 @@ export function cosmeticUnits(catalog: Catalog | undefined): CosmeticUnit[] {
             collection: cosmetic.collection,
             description: cosmetic.description,
             cover_url: cosmetic.cover_url,
+            preview_url: cosmetic.preview_url,
         });
     }
 
@@ -205,6 +225,12 @@ export interface Collection {
     id: number;
     name: string;
     description: string | null;
+    asset_id: number | null;
+}
+
+/** An `<img>` src for an asset: the backend redirects to object storage, which images may follow. */
+export function assetUrl(env: string, id: number | null | undefined): string | undefined {
+    return id == null ? undefined : `${env}/asset/${id}`;
 }
 
 export function useCollections() {

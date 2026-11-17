@@ -4,7 +4,7 @@ import {
     cosmeticUnits,
     formatMinor,
     useAdminMutation,
-    useAdminQuery,
+    usePagedQuery,
     useCatalog,
     useCollections,
     useTags,
@@ -15,6 +15,7 @@ import {
     DeleteButton,
     ErrorBanner,
     Field,
+    Pager,
     Panel,
     PayloadPreview,
     Table,
@@ -28,7 +29,7 @@ import {
     type CheckItem,
 } from "./shared";
 
-interface Targets {
+export interface Targets {
     collections: number[];
     tags: number[];
     cosmetics: number[];
@@ -48,6 +49,7 @@ interface Discount {
     ends_at: string | null;
     enabled: boolean;
     applies_to_all: boolean;
+    apply_individually: boolean;
     targets: Targets;
     min_subtotal_minor: number | null;
     max_redemptions: number | null;
@@ -74,11 +76,13 @@ function toBody(discount: Discount) {
 function describe(discount: Discount) {
     return discount.percent_off != null
         ? `${discount.percent_off}% off`
-        : `${formatMinor(discount.amount_off_minor, discount.currency)} off`;
+        : `${formatMinor(discount.amount_off_minor, discount.currency)} off${
+              discount.code && discount.apply_individually ? " each" : ""
+          }`;
 }
 
 /** Targets are stored per kind; the picker shows products as one list. */
-function useTargetItems() {
+export function useTargetItems() {
     const catalog = useCatalog();
     const tags = useTags();
     const collections = useCollections();
@@ -135,7 +139,7 @@ function useTargetItems() {
 }
 
 export function DiscountsPanel({ kind }: { kind: Kind }) {
-    const list = useAdminQuery<Discount[]>(`/v1/admin/discounts?kind=${kind}`);
+    const list = usePagedQuery<Discount>(`/v1/admin/discounts?kind=${kind}`);
     const items = useTargetItems();
     const [editing, setEditing] = useState<number | null>(null);
 
@@ -175,9 +179,9 @@ export function DiscountsPanel({ kind }: { kind: Kind }) {
                     "Enabled",
                     "",
                 ]}
-                empty={!list.isPending && !list.data?.length}
+                empty={!list.isPending && !list.data?.items.length}
             >
-                {list.data?.map((discount) => (
+                {list.data?.items.map((discount) => (
                     <DiscountRow
                         key={discount.id}
                         discount={discount}
@@ -203,6 +207,12 @@ export function DiscountsPanel({ kind }: { kind: Kind }) {
                     />
                 ))}
             </Table>
+            <Pager
+                page={list.page}
+                totalPages={list.data?.total_pages ?? 1}
+                totalItems={list.data?.total_items}
+                onChange={list.setPage}
+            />
         </Panel>
     );
 }
@@ -334,6 +344,9 @@ function DiscountForm({
     const [endsAt, setEndsAt] = useState(toLocalInput(initial?.ends_at));
     const [enabled, setEnabled] = useState(initial?.enabled ?? true);
     const [all, setAll] = useState(initial?.applies_to_all ?? false);
+    const [individually, setIndividually] = useState(
+        initial?.apply_individually ?? true,
+    );
     const [products, setProducts] = useState<string[]>(
         initial
             ? [
@@ -377,6 +390,7 @@ function DiscountForm({
         ends_at: fromLocalInput(endsAt),
         enabled,
         applies_to_all: all,
+        apply_individually: individually,
         targets: {
             collections: all ? [] : collections,
             tags: all ? [] : tags,
@@ -589,6 +603,13 @@ function DiscountForm({
                         />
                     </Field>
                 </div>
+            )}
+            {kind === "coupon" && fixed && (
+                <Toggle
+                    label="Take the amount off each covered item, not once off the order"
+                    checked={individually}
+                    onChange={setIndividually}
+                />
             )}
             <Toggle label="Enabled" checked={enabled} onChange={setEnabled} />
             <PayloadPreview body={body} />
