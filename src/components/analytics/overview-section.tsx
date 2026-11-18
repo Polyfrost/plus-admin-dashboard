@@ -5,6 +5,7 @@ import {
     CalendarClock,
     Clock,
     Hourglass,
+    Link2,
     Package,
     ShoppingCart,
     Timer,
@@ -20,7 +21,11 @@ import {
 } from "@/lib/analytics";
 import { asOfLabel } from "@/lib/analytics-range";
 import { ChartCard, HBarList, Section, StatTile } from "@/components/viz";
-import { SectionBody, TileGrid } from "@/components/analytics/shared";
+import {
+    SectionBody,
+    TileGrid,
+    optional,
+} from "@/components/analytics/shared";
 
 const DISTRIBUTION_BUCKETS = [
     { key: "0", label: "0 items" },
@@ -45,6 +50,7 @@ export function OverviewSection({
                 {(data, dimmed) => {
                     const owned = data.owned_items_per_user;
                     const play = data.playtime;
+                    const linked = data.linked_accounts;
                     const buckets = DISTRIBUTION_BUCKETS.map((bucket) => ({
                         key: bucket.key,
                         label: bucket.label,
@@ -145,6 +151,22 @@ export function OverviewSection({
                                             : "—"
                                     }
                                     sub="Total playtime ÷ sessions"
+                                />
+                                <StatTile
+                                    icon={<Link2 size={16} />}
+                                    label="Linked accounts"
+                                    value={optional(linked?.total_links)}
+                                    sub={asOfLabel(data.period.end)}
+                                />
+                                <StatTile
+                                    icon={<UserCheck size={16} />}
+                                    label="Users with a linked account"
+                                    value={optional(linked?.linked_users)}
+                                    sub={
+                                        linked
+                                            ? `${percent(linked.linked_users, data.total_users)} of all users`
+                                            : undefined
+                                    }
                                 />
                             </TileGrid>
 

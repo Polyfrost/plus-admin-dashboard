@@ -19,6 +19,7 @@ export const SECTIONS = [
     { id: "monetization", label: "Monetization" },
     { id: "clients", label: "Clients" },
     { id: "mods", label: "Mods" },
+    { id: "linked-accounts", label: "Linked accounts" },
 ] as const;
 
 /** The connection, the range every query shares, and the jump links. */

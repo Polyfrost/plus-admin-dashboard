@@ -37,6 +37,13 @@ export interface Playtime {
     total_sessions: number;
 }
 
+export interface LinkedAccountTotals {
+    /** Links held at the end of the period. */
+    total_links: number;
+    /** Users holding at least one link at the end of the period. */
+    linked_users: number;
+}
+
 export interface OverviewResponse {
     period: AnalyticsPeriod;
     total_users: number;
@@ -44,6 +51,8 @@ export interface OverviewResponse {
     monthly_active_users: number;
     owned_items_per_user: OwnedItemsPerUser;
     playtime: Playtime;
+    /** Absent on deployments older than linked account analytics. */
+    linked_accounts?: LinkedAccountTotals | null;
 }
 
 export interface DailyPoint {
@@ -266,6 +275,29 @@ export interface ModsResponse {
     /** Players whose latest mod report falls in the period. */
     reporting_players: number;
     mods: ModUsage[];
+}
+
+export interface ProviderLinks {
+    provider: string;
+    /** Held at the end of the period. */
+    links: number;
+    new_links: number;
+}
+
+export interface LinkDay {
+    day: string;
+    new_links: number;
+    /** Held at the end of the day. */
+    total_links: number;
+}
+
+export interface LinkedAccountsResponse extends LinkedAccountTotals {
+    start: string;
+    end: string;
+    new_links: number;
+    providers: ProviderLinks[];
+    /** One entry per day of the period, gaps included. */
+    days: LinkDay[];
 }
 
 export interface HealthResponse {

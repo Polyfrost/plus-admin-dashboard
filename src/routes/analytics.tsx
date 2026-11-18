@@ -12,6 +12,7 @@ import {
     type ClientsResponse,
     type DailyResponse,
     type HealthResponse,
+    type LinkedAccountsResponse,
     type ModsResponse,
     type MonetizationResponse,
     type OverviewResponse,
@@ -38,6 +39,7 @@ import { CatalogSection } from "@/components/analytics/catalog-section";
 import { MonetizationSection } from "@/components/analytics/monetization-section";
 import { ClientsSection } from "@/components/analytics/clients-section";
 import { ModsSection } from "@/components/analytics/mods-section";
+import { LinkedAccountsSection } from "@/components/analytics/linked-accounts-section";
 
 export const Route = createFileRoute("/analytics")({
     component: Analytics,
@@ -137,6 +139,10 @@ function Analytics() {
         enabled,
         params,
     });
+    const linkedAccounts = useAnalyticsQuery<LinkedAccountsResponse>(
+        "/linked-accounts",
+        { ...base, enabled, params },
+    );
     const anyFetching = [
         overview,
         daily,
@@ -148,6 +154,7 @@ function Analytics() {
         monetization,
         clients,
         mods,
+        linkedAccounts,
         health,
     ].some((query) => query.isFetching);
 
@@ -192,6 +199,7 @@ function Analytics() {
                 {canSeeRevenue && <MonetizationSection query={monetization} />}
                 <ClientsSection query={clients} />
                 <ModsSection query={mods} />
+                <LinkedAccountsSection query={linkedAccounts} />
             </ExportScopeProvider>
         </div>
     );
