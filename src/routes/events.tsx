@@ -74,6 +74,7 @@ interface DayReward {
 
 interface EventConfig {
     name: string;
+    slug: string | null;
     kind: "daily_rewards";
     claim_window_hours: number;
     rewards: DayReward[];
@@ -186,7 +187,10 @@ function Events() {
                         return (
                             <Fragment key={event.id}>
                                 <tr>
-                                    <td className="px-4 py-3">{event.name}</td>
+                                    <td className="px-4 py-3">
+                                        {event.name}
+                                        {event.slug && <div className="font-mono text-xs text-gray-500">{event.slug}</div>}
+                                    </td>
                                     <td className="px-4 py-3 text-xs text-gray-500">
                                         {new Date(event.starts_at).toLocaleString()} → {new Date(event.ends_at).toLocaleString()}
                                     </td>
@@ -323,6 +327,7 @@ function Claims({ event, name }: { event: EventView; name: (id: number) => strin
 
 function EventForm({ initial }: { initial?: EventView }) {
     const [name, setName] = useState(initial?.name ?? "");
+    const [slug, setSlug] = useState(initial?.slug ?? "");
     const [windowHours, setWindowHours] = useState(String(initial?.claim_window_hours ?? 24));
     const [days, setDays] = useState<DayReward[]>(
         initial?.rewards ?? [{ day: today(), reward: newReward("cosmetic"), requirements: [] }],
@@ -330,6 +335,7 @@ function EventForm({ initial }: { initial?: EventView }) {
 
     const body: EventConfig = {
         name,
+        slug: slug.trim() || null,
         kind: "daily_rewards",
         claim_window_hours: Number(windowHours),
         rewards: days,
@@ -352,6 +358,7 @@ function EventForm({ initial }: { initial?: EventView }) {
                         ? undefined
                         : () => {
                               setName("");
+                              setSlug("");
                               setDays([{ day: today(), reward: newReward("cosmetic"), requirements: [] }]);
                           },
                 });
@@ -362,6 +369,16 @@ function EventForm({ initial }: { initial?: EventView }) {
             <div className="flex flex-wrap gap-3">
                 <Field label="Name">
                     <input value={name} onChange={(e) => setName(e.target.value)} required placeholder="Advent calendar" className={inputClass} />
+                </Field>
+                <Field label="Slug" help="Optional unique handle: lowercase letters, digits, hyphens">
+                    <input
+                        value={slug}
+                        maxLength={48}
+                        pattern="[a-z0-9][a-z0-9\-]*"
+                        onChange={(e) => setSlug(e.target.value.toLowerCase())}
+                        placeholder="advent-2026"
+                        className={`${inputClass} font-mono`}
+                    />
                 </Field>
                 <Field label="Claim window (hours)" help="From the start of each UTC day; 24 is that day only">
                     <input
