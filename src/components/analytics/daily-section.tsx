@@ -54,6 +54,10 @@ export function DailySection({
                         metric("wau", "WAU", SERIES_COLORS[1]),
                         metric("mau", "MAU", SERIES_COLORS[2]),
                     ];
+                    const logins = [
+                        metric("logins", "Logged in", SERIES_COLORS[0]),
+                        metric("dau", "Played", SERIES_COLORS[1]),
+                    ];
                     const composition = [
                         metric("returning_users", "Returning", SERIES_COLORS[0]),
                         metric("new_users", "New", SERIES_COLORS[1]),
@@ -191,6 +195,14 @@ export function DailySection({
                                 </ChartCard>
 
                                 <ChartCard
+                                    title="Logins"
+                                    subtitle="Players who logged in vs players who played"
+                                    table={seriesTable("Day", labels, logins)}
+                                >
+                                    <LineChart labels={labels} series={logins} />
+                                </ChartCard>
+
+                                <ChartCard
                                     title="New vs returning"
                                     subtitle="How each day's active base splits"
                                     table={seriesTable(
@@ -302,6 +314,7 @@ export function DailySection({
                                     title="Tracked link hits"
                                     subtitle="Visits counted on /go/{slug}"
                                     table={seriesTable("Day", labels, linkHits)}
+                                    className="xl:col-span-2"
                                 >
                                     <ColumnChart
                                         labels={labels}
@@ -328,6 +341,7 @@ function dailyTable(days: DailyPoint[]): TableData {
         ["DAU", (day) => formatNumber(day.dau)],
         ["WAU", (day) => formatNumber(day.wau)],
         ["MAU", (day) => formatNumber(day.mau)],
+        ["Logins", (day) => formatNumber(day.logins)],
         ["New", (day) => formatNumber(day.new_users)],
         ["Returning", (day) => formatNumber(day.returning_users)],
         ["Total users", (day) => formatNumber(day.total_users)],

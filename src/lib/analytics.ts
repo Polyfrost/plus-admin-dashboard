@@ -60,6 +60,8 @@ export interface DailyPoint {
     dau: number;
     wau: number;
     mau: number;
+    /** Distinct players who logged in, whether or not they played. */
+    logins: number;
     new_users: number;
     returning_users: number;
     total_users: number;
