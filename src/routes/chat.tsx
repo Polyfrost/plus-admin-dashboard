@@ -776,7 +776,7 @@ function GroupHeader({
                 )}
                 <span className="ml-auto flex gap-2">
                     {group.special && (
-                        <button onClick={() => confirm("Convert this Special Chat into a normal group chat owned by this account? A new Special Chat is made the next time someone messages it.") && claim.mutate(undefined)} className={secondaryButton}>
+                        <button onClick={() => confirm("Convert this Special Chat into a normal group chat owned by this account? The player keeps this as their only chat with staff.") && claim.mutate(undefined)} className={secondaryButton}>
                             Convert to normal chat
                         </button>
                     )}
