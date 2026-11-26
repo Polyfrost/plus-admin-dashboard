@@ -19,6 +19,7 @@ export const SECTIONS = [
     { id: "monetization", label: "Monetization" },
     { id: "clients", label: "Clients" },
     { id: "mods", label: "Mods" },
+    { id: "performance", label: "Performance" },
     { id: "linked-accounts", label: "Linked accounts" },
 ] as const;
 

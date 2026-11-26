@@ -9,6 +9,7 @@ import {
     Legend,
     Line,
     LineChart as RechartsLineChart,
+    ReferenceLine,
     ResponsiveContainer,
     Tooltip,
     XAxis,
@@ -164,7 +165,11 @@ export function LineChart({
     formatTick = formatCompact,
     /** Wash the area under a single series. Ignored for multi-series charts. */
     area = false,
-}: PlotProps & { area?: boolean }) {
+    markers = [],
+}: PlotProps & {
+    area?: boolean;
+    markers?: { label: string; name: string }[];
+}) {
     if (labels.length === 0) return <EmptyPlot height={height} />;
 
     const rows = toRows(labels, series);
@@ -173,12 +178,27 @@ export function LineChart({
         formatTick,
         seriesCount: series.length,
     });
+    const rules = markers.map((marker) => (
+        <ReferenceLine
+            key={marker.label}
+            x={marker.label}
+            stroke={INK.muted}
+            strokeDasharray="3 3"
+            label={{
+                value: marker.name,
+                position: "insideTopLeft",
+                fill: INK.muted,
+                fontSize: 10,
+            }}
+        />
+    ));
 
     return (
         <ResponsiveContainer width="100%" height={height}>
             {area && series.length === 1 ? (
                 <AreaChart data={rows}>
                     {parts}
+                    {rules}
                     <Area
                         dataKey={series[0].key}
                         name={series[0].name}
@@ -194,6 +214,7 @@ export function LineChart({
             ) : (
                 <RechartsLineChart data={rows}>
                     {parts}
+                    {rules}
                     {series.map((one) => (
                         <Line
                             key={one.key}

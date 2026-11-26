@@ -279,6 +279,42 @@ export interface ModsResponse {
     mods: ModUsage[];
 }
 
+export interface PerfDay {
+    day: string;
+    minecraft_version: string;
+    players: number;
+    median_fps: number;
+    low1_fps: number;
+    low01_fps: number;
+}
+
+export interface PerfDailyResponse {
+    start: string;
+    end: string;
+    all_versions: string;
+    releases: { client_version: string; day: string }[];
+    days: PerfDay[];
+}
+
+export interface PerfRegression {
+    minecraft_version: string;
+    loader: string;
+    mod_id: string;
+    from_version: string;
+    to_version: string;
+    metric: string;
+    pairs: number;
+    ratio: number;
+    solo_pairs: number;
+    solo_ratio: number | null;
+    detected_at: string;
+    updated_at: string;
+}
+
+export interface PerfResponse {
+    regressions: PerfRegression[];
+}
+
 export interface ProviderLinks {
     provider: string;
     /** Held at the end of the period. */

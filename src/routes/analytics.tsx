@@ -14,6 +14,8 @@ import {
     type HealthResponse,
     type LinkedAccountsResponse,
     type ModsResponse,
+    type PerfDailyResponse,
+    type PerfResponse,
     type MonetizationResponse,
     type OverviewResponse,
     type QueryParams,
@@ -39,6 +41,7 @@ import { CatalogSection } from "@/components/analytics/catalog-section";
 import { MonetizationSection } from "@/components/analytics/monetization-section";
 import { ClientsSection } from "@/components/analytics/clients-section";
 import { ModsSection } from "@/components/analytics/mods-section";
+import { PerfSection } from "@/components/analytics/perf-section";
 import { LinkedAccountsSection } from "@/components/analytics/linked-accounts-section";
 
 export const Route = createFileRoute("/analytics")({
@@ -139,6 +142,12 @@ function Analytics() {
         enabled,
         params,
     });
+    const perfDaily = useAnalyticsQuery<PerfDailyResponse>("/perf/daily", {
+        ...base,
+        enabled,
+        params,
+    });
+    const perf = useAnalyticsQuery<PerfResponse>("/perf", { ...base, enabled });
     const linkedAccounts = useAnalyticsQuery<LinkedAccountsResponse>(
         "/linked-accounts",
         { ...base, enabled, params },
@@ -154,6 +163,8 @@ function Analytics() {
         monetization,
         clients,
         mods,
+        perfDaily,
+        perf,
         linkedAccounts,
         health,
     ].some((query) => query.isFetching);
@@ -199,6 +210,7 @@ function Analytics() {
                 {canSeeRevenue && <MonetizationSection query={monetization} />}
                 <ClientsSection query={clients} />
                 <ModsSection query={mods} />
+                <PerfSection daily={perfDaily} regressions={perf} />
                 <LinkedAccountsSection query={linkedAccounts} />
             </ExportScopeProvider>
         </div>
