@@ -8,9 +8,11 @@ import {
     useCatalog,
     useCollections,
     type CatalogBundle,
+    type CatalogCosmetic,
     type Collection,
     type CosmeticUnit,
 } from "@/lib/store-api";
+import { useCoverMaker } from "@/components/preview/coverMaker";
 import {
     Badge,
     CheckList,
@@ -392,20 +394,23 @@ function ProductRow({
         body: { bundle_id: id },
     }));
     // Every variant has its own cover, so a group re-renders each in turn.
-    const render = useAdminMutation<number>((id) => ({
-        method: "POST",
-        path: "/cosmetics/manage/render-cover",
-        body: { cosmetic_id: id, force: true },
-    }));
-    const [rendering, setRendering] = useState(false);
-    const renderCovers = async (ids: number[]) => {
-        setRendering(true);
-        try {
-            for (const id of ids) await render.mutateAsync(id);
-        } catch {
-            // Shown through render.error.
-        } finally {
-            setRendering(false);
+    const makeCover = useCoverMaker();
+    const [covers, setCovers] = useState<CoverRun | null>(null);
+    const rendering = covers !== null && covers.done < covers.total;
+    const renderCovers = async (variants: CatalogCosmetic[]) => {
+        const run: CoverRun = { done: 0, total: variants.length, made: 0, failed: [] };
+        setCovers({ ...run });
+        for (const variant of variants) {
+            try {
+                await makeCover(variant);
+                run.made++;
+            } catch (error) {
+                run.failed.push(
+                    `${variant.variant_name ?? variant.name ?? `#${variant.id}`}: ${(error as Error).message}`,
+                );
+            }
+            run.done++;
+            setCovers({ ...run, failed: [...run.failed] });
         }
     };
 
@@ -470,12 +475,10 @@ function ProductRow({
                         {product.kind === "cosmetics" && (
                             <button
                                 onClick={() =>
-                                    void renderCovers(
-                                        product.unit.variants.map((v) => v.id),
-                                    )
+                                    void renderCovers(product.unit.variants)
                                 }
                                 disabled={rendering}
-                                title="Re-render the cover image from the cosmetic's file"
+                                title="Make the cover image again from the cosmetic's file"
                                 className="text-gray-400 hover:text-gray-100 disabled:opacity-50"
                             >
                                 <ImageUp
@@ -501,10 +504,11 @@ function ProductRow({
                     </div>
                 </td>
             </tr>
-            {(open || remove.error || render.error) && (
+            {(open || remove.error || covers) && (
                 <tr>
                     <td colSpan={6} className="bg-gray-900/40 px-4 py-4">
-                        <ErrorBanner error={remove.error ?? render.error} />
+                        <ErrorBanner error={remove.error} />
+                        {covers && <CoverProgress run={covers} />}
                         {open && (
                             <div className="flex flex-col gap-6">
                                 <ProductDetails
@@ -519,6 +523,38 @@ function ProductRow({
                 </tr>
             )}
         </>
+    );
+}
+
+interface CoverRun {
+    done: number;
+    total: number;
+    made: number;
+    failed: string[];
+}
+
+function CoverProgress({ run }: { run: CoverRun }) {
+    const plural = (count: number) => `${count} cover${count === 1 ? "" : "s"}`;
+    return (
+        <div className="mb-3 flex flex-col gap-1 text-sm">
+            {run.done < run.total ? (
+                <p className="text-gray-400">
+                    Making covers: {run.done} of {run.total} done…
+                </p>
+            ) : (
+                <p className={run.failed.length ? "text-amber-300" : "text-green-300"}>
+                    Made {plural(run.made)}
+                    {run.failed.length ? `, ${run.failed.length} failed.` : "."}
+                </p>
+            )}
+            {run.failed.length > 0 && (
+                <ul className="list-disc pl-5 text-red-300">
+                    {run.failed.map((line) => (
+                        <li key={line}>{line}</li>
+                    ))}
+                </ul>
+            )}
+        </div>
     );
 }
 

@@ -120,7 +120,7 @@ function RoleEditor({
     return (
         <Panel
             title={isNew ? "New role" : role.name}
-            description="Players hold every flag of every role they have. The highest coloured role is their display colour, in game too. Unless you are an administrator, you can only manage roles below your highest one, and only with flags you hold."
+            description="Players hold every flag of every role they have. The highest colored role is their display color, in game too. Unless you are an administrator, you can only manage roles below your highest one, and only with flags you hold."
         >
             <form onSubmit={onSubmit} className="flex flex-col gap-4">
                 <div className="flex flex-wrap items-end gap-3">
@@ -141,7 +141,7 @@ function RoleEditor({
                             className={inputClass}
                         />
                     </Field>
-                    <Field label="Colour">
+                    <Field label="Color">
                         <div className="flex items-center gap-2">
                             <input
                                 type="color"
