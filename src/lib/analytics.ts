@@ -315,6 +315,17 @@ export interface PerfResponse {
     regressions: PerfRegression[];
 }
 
+export interface PerfProfile {
+    id: string;
+    created_at: string;
+    client_version: string;
+    minecraft_version: string;
+    loader: string;
+    pack_hash: string;
+    seconds: number;
+    size_bytes: number;
+}
+
 export interface ProviderLinks {
     provider: string;
     /** Held at the end of the period. */
@@ -482,6 +493,12 @@ export function formatDayLabel(day: string): string {
         ...(thisYear ? {} : { year: "numeric" }),
         timeZone: "UTC",
     });
+}
+
+export function formatBytes(bytes: number): string {
+    return bytes < 1024 * 1024
+        ? `${(bytes / 1024).toFixed(1)} KB`
+        : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 export function formatDateTime(iso: string): string {

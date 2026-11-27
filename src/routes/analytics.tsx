@@ -15,6 +15,7 @@ import {
     type LinkedAccountsResponse,
     type ModsResponse,
     type PerfDailyResponse,
+    type PerfProfile,
     type PerfResponse,
     type MonetizationResponse,
     type OverviewResponse,
@@ -148,6 +149,11 @@ function Analytics() {
         params,
     });
     const perf = useAnalyticsQuery<PerfResponse>("/perf", { ...base, enabled });
+    const perfProfiles = useAnalyticsQuery<PerfProfile[]>("/perf/profiles", {
+        ...base,
+        enabled,
+        params: { limit: 50 },
+    });
     const linkedAccounts = useAnalyticsQuery<LinkedAccountsResponse>(
         "/linked-accounts",
         { ...base, enabled, params },
@@ -165,6 +171,7 @@ function Analytics() {
         mods,
         perfDaily,
         perf,
+        perfProfiles,
         linkedAccounts,
         health,
     ].some((query) => query.isFetching);
@@ -210,7 +217,12 @@ function Analytics() {
                 {canSeeRevenue && <MonetizationSection query={monetization} />}
                 <ClientsSection query={clients} />
                 <ModsSection query={mods} />
-                <PerfSection daily={perfDaily} regressions={perf} />
+                <PerfSection
+                    env={env}
+                    daily={perfDaily}
+                    regressions={perf}
+                    profiles={perfProfiles}
+                />
                 <LinkedAccountsSection query={linkedAccounts} />
             </ExportScopeProvider>
         </div>
