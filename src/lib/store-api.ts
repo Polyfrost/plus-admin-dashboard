@@ -1,6 +1,15 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, useSession, type Session } from "@/lib/session";
+import {
+    ApiError,
+    catalogNeedsMerge,
+    mergePublicVariants,
+    parseErrorBody,
+} from "@/lib/cosmetics-api";
+
+/** Where a cosmetic can be equipped; mirrors the backend's `BodySlot`. */
+export { BODY_SLOTS, type BodySlot } from "@/lib/cosmetics-api";
 
 /**
  * Calls the backend as the signed-in player. Every admin surface goes through
@@ -29,7 +38,7 @@ export async function adminRequest(
     const text = await response.text();
     if (!response.ok) {
         // The backend's own message says far more than a status code.
-        throw new Error(text.trim() || `Request failed (${response.status})`);
+        throw new ApiError(response.status, parseErrorBody(response.status, text));
     }
 
     return text ? JSON.parse(text) : null;
@@ -113,6 +122,15 @@ export interface CatalogCosmetic {
     preview_url: string | null;
     tag_ids: number[];
     created_at: string;
+    variant_key?: string | null;
+    asset_id?: number | null;
+    slots?: string[];
+    color_slots?: CatalogColorSlot[];
+}
+
+export interface CatalogColorSlot {
+    name: string;
+    [key: string]: unknown;
 }
 
 export interface CatalogGroup {
@@ -204,8 +222,99 @@ export function cosmeticUnits(catalog: Catalog | undefined): CosmeticUnit[] {
     return [...units.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+export interface UploadGroup {
+    group: CatalogGroup;
+    unit: CosmeticUnit | null;
+}
+
+export function findUploadGroup(catalog: Catalog, type: string, name: string): UploadGroup | null {
+    const wanted = name.trim();
+    if (!wanted) return null;
+    const group = catalog.groups.find((candidate) => candidate.type === type && candidate.name === wanted);
+    if (!group) return null;
+    return { group, unit: cosmeticUnits(catalog).find((unit) => unit.group_id === group.id) ?? null };
+}
+
+export interface GroupState {
+    id: number | null;
+    name: string;
+    enabled: boolean;
+    store_product_id: string | null;
+    base_price: number | null;
+}
+
+export function groupState({ group, unit }: UploadGroup): GroupState {
+    return {
+        id: unit?.first.id ?? null,
+        name: group.name,
+        enabled: group.enabled,
+        store_product_id: unit?.store_product_id ?? null,
+        base_price: unit?.base_price ?? null,
+    };
+}
+
+export function groupOfCosmetic(catalog: Catalog, cosmeticId: number): GroupState | null {
+    const unit = cosmeticUnits(catalog).find(
+        (candidate) => candidate.group_id !== null && candidate.variants.some((variant) => variant.id === cosmeticId),
+    );
+    if (!unit) return null;
+    return {
+        id: unit.first.id,
+        name: unit.name,
+        enabled: unit.enabled,
+        store_product_id: unit.store_product_id,
+        base_price: unit.base_price,
+    };
+}
+
+export interface CatalogRead {
+    data: Catalog | undefined;
+    isError: boolean;
+    dataUpdatedAt: number;
+}
+
+export function catalogCheckedSince(read: CatalogRead, since: number): boolean {
+    return read.data !== undefined && !read.isError && read.dataUpdatedAt >= since;
+}
+
+export function groupAfterPublish(
+    read: { data: Catalog | undefined; isError: boolean },
+    cosmeticId: number,
+    group: GroupState,
+    published: boolean,
+): GroupState | null {
+    const found = read.isError || !read.data ? null : groupOfCosmetic(read.data, cosmeticId);
+    return found ?? (published ? { ...group, enabled: true } : null);
+}
+
+export function publishProblem(group: GroupState | null): string {
+    if (!group) {
+        return "Every variant is uploaded, but we couldn't check whether the group went live. The store update may not have gone through either, so check the group in the library before you announce it.";
+    }
+    if (!group.enabled) return "Every variant is uploaded, but the group is still hidden.";
+    if (group.store_product_id) {
+        return "The group is live in game, but the store update may not have gone through, so its product can still be hidden in the store. Try again.";
+    }
+    return "The group is live, but the request still reported a problem.";
+}
+
+export const UNCHECKED_SALE_HINT = "We couldn't reload the library, so we can't tell whether the group is live or on sale. Check it in the library.";
+
 export function useCatalog() {
-    return useAdminQuery<Catalog>("/v1/admin/catalog");
+    const session = useSession();
+    return useQuery<Catalog>({
+        queryKey: [STORE_KEY, session.env, "/v1/admin/catalog"],
+        queryFn: async () => {
+            const catalog = (await adminRequest(session, "GET", "/v1/admin/catalog")) as Catalog;
+            if (!catalogNeedsMerge(catalog)) return catalog;
+            try {
+                return mergePublicVariants(catalog, await adminRequest(session, "GET", "/cosmetics"));
+            } catch {
+                return catalog;
+            }
+        },
+        enabled: true,
+    });
 }
 
 export interface Tag {
@@ -237,25 +346,37 @@ export function useCollections() {
     return useAdminQuery<{ collections: Collection[] }>("/collections/list");
 }
 
-/** Where a cosmetic can be equipped; mirrors the backend's `BodySlot`. */
-export const BODY_SLOTS = [
-    "cape",
-    "backpack",
-    "glasses",
-    "wings",
-    "left_hand",
-    "right_hand",
-    "hat",
-    "aura",
-    "boots",
-    "shoulder",
-    "pet",
-] as const;
-export type BodySlot = (typeof BODY_SLOTS)[number];
-
 /** USD major units, the way cosmetic and bundle prices are stored. */
 export function formatPrice(price: number | null | undefined): string {
     return price == null ? "—" : `$${price.toFixed(2)}`;
+}
+
+export function uploadSaleHint(
+    group: Pick<CosmeticUnit, "store_product_id" | "base_price"> | null | undefined,
+    done: boolean,
+    live = true,
+    storeFailed = false,
+): string {
+    if (!group) {
+        return done
+            ? "It's in the library, not on sale. Price it from Store → Products when it's ready."
+            : "Nothing is put on sale; price it from Store → Products afterwards.";
+    }
+    if (group.store_product_id && !live) {
+        return "The group has a price but is hidden, so nobody can buy the new variants until it's live.";
+    }
+    if (group.store_product_id && storeFailed) {
+        return "The group is live in game, but the store update may not have gone through, so we can't tell yet whether the new variants are on sale. Try the store update again.";
+    }
+    if (group.store_product_id) {
+        const price = group.base_price == null ? "" : `, priced at ${formatPrice(group.base_price)}`;
+        return done
+            ? `The new variants are part of the group's store product${price}. Check Store → Products to see whether it's listed or to change the price.`
+            : `The new variants will be part of the group's store product${price}. Check Store → Products to see whether it's listed or to change the price.`;
+    }
+    return done
+        ? "The group has no store product of its own, so the new variants aren't sold by themselves. Bundles list variants one by one, so add them to any bundle that should include them."
+        : "The group has no store product of its own, so the new variants won't be sold by themselves. Bundles list variants one by one, so add them to any bundle that should include them.";
 }
 
 /** Minor units in the given currency, the way orders and discounts are stored. */

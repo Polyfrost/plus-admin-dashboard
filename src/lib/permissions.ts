@@ -51,6 +51,8 @@ export function toHex(color: number): string {
 /** Dashboard pages, in nav order, opening for any of their flags. */
 export const PAGES = [
     { to: "/cosmetics", label: "Cosmetics", perm: Perm.MANAGE_COSMETICS },
+    { to: "/sets", label: "Sets", perm: Perm.MANAGE_COSMETICS },
+    { to: "/players", label: "Players", perm: Perm.MANAGE_COSMETICS },
     { to: "/analytics", label: "Analytics", perm: Perm.VIEW_ANALYTICS },
     { to: "/links", label: "Links", perm: Perm.MANAGE_LINKS },
     {

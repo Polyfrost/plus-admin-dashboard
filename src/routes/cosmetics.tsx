@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { zipSync } from "fflate";
 import {
     ArrowLeft,
@@ -9,6 +9,7 @@ import {
     EyeOff,
     FileUp,
     FolderUp,
+    ImagePlus,
     ImageUp,
     Plus,
     RefreshCw,
@@ -19,58 +20,76 @@ import {
     X,
 } from "lucide-react";
 import {
-    BODY_SLOTS,
+    UNCHECKED_SALE_HINT,
+    catalogCheckedSince,
     cosmeticUnits,
+    findUploadGroup,
     formatPrice,
+    groupAfterPublish,
+    groupState,
+    publishProblem,
+    uploadSaleHint,
     useAdminMutation,
     useCatalog,
-    type BodySlot,
     type CatalogCosmetic,
     type CosmeticUnit,
+    type GroupState,
 } from "@/lib/store-api";
+import {
+    COSMETIC_TYPES,
+    DEFAULT_SLOTS,
+    MAX_COVER_BYTES,
+    MAX_COVER_SIDE,
+    SLOT_HINTS,
+    buildCreateForm,
+    buildReplaceForm,
+    buildVariantUpdate,
+    bundleProblems,
+    coverMode,
+    coverProblems,
+    formatBytes,
+    hasRootManifest,
+    inferEffectSlots,
+    inspectFiles,
+    inspectSingle,
+    isJunkPath,
+    manifestVariantKeys,
+    needsVariantKey,
+    parseUploadOutcome,
+    sharedAssetVariants,
+    slotOptions,
+    uploadVisibility,
+    validateSlots,
+    variantKeyProblems,
+    type BodySlot,
+    type BundleInfo,
+    type CosmeticType,
+    type EffectContent,
+    type Issue,
+    type NamedBlob,
+    type UploadOutcome,
+} from "@/lib/cosmetics-api";
 import {
     Badge,
     CheckList,
     ErrorBanner,
     Field,
+    Toggle,
     inputClass,
     primaryButton,
     secondaryButton,
 } from "@/components/store/shared";
-import { CosmeticPreview, isMacosJunk } from "@/components/CosmeticPreview";
+import { blocksUpload, checkBundle, type BundleReport as EngineReport } from "@/lib/bundle-check";
+import { CosmeticPreview, type PreviewSource } from "@/components/CosmeticPreview";
+import { needsDashboardCover, makeCoverFile, useAutoCover, type AutoCover, type CoverRequest } from "@/components/preview/autoCover";
+import { useCoverMaker, useCoverUpload, type CoverMade } from "@/components/preview/coverMaker";
+import { IssueList, OutcomeNotes, ProblemBanner } from "@/components/IssueList";
 
 export const Route = createFileRoute("/cosmetics")({
     component: CosmeticsRoute,
 });
 
-const TYPES = [
-    "cape",
-    "backpack",
-    "glasses",
-    "wings",
-    "glove",
-    "hat",
-    "aura",
-    "boots",
-    "shoulder",
-    "pet",
-    "emote",
-] as const;
-type CosmeticType = (typeof TYPES)[number];
-
-const DEFAULT_SLOTS: Record<CosmeticType, BodySlot[]> = {
-    cape: ["cape"],
-    backpack: ["backpack"],
-    glasses: ["glasses"],
-    wings: ["wings"],
-    glove: ["left_hand", "right_hand"],
-    hat: ["hat"],
-    aura: ["aura"],
-    boots: ["boots"],
-    shoulder: ["shoulder"],
-    pet: ["pet"],
-    emote: [],
-};
+const TYPES = COSMETIC_TYPES;
 
 /** What to pick in the Files step, per type. */
 const fileHint = (type: CosmeticType) =>
@@ -78,7 +97,20 @@ const fileHint = (type: CosmeticType) =>
         ? "A cape texture (.png), or a folder with the texture and its animation sheet."
         : type === "emote"
           ? "A folder or .zip with the emote's animation (.json)."
-          : "A folder or .zip with the model (.geo.json) and its texture (.png); an animation (.json) is optional.";
+          : type === "nameplate"
+            ? "A folder or .zip with manifest.json (format 1) at the root and the textures it uses."
+            : type === "effect"
+              ? "A folder or .zip with manifest.json (kind: effect) at the root and the files it uses."
+              : "A folder or .zip with the model (.geo.json) and its texture (.png); an animation (.json) is optional. A bundle with manifest.json at the root works too.";
+
+const typeHint = (type: CosmeticType) =>
+    type === "emote"
+        ? "An animation the player performs"
+        : type === "nameplate"
+          ? "Shown above the player's name"
+          : type === "effect"
+            ? "Trails, moments and sounds"
+            : `Worn on: ${DEFAULT_SLOTS[type].join(", ")}`;
 
 const previewSlot = (type: string) =>
     DEFAULT_SLOTS[type as CosmeticType]?.[0] ?? "hat";
@@ -86,17 +118,28 @@ const previewSlot = (type: string) =>
 const relativePath = (file: File) =>
     (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
 
-/** Zips a picked folder in the browser, dropping its top-level directory. */
-function buildBundle(files: File[]): Promise<Uint8Array> {
+const slotItems = (type: string) =>
+    slotOptions(type).map((slot) => ({ id: slot as string, label: slot, hint: SLOT_HINTS[slot] }));
+
+const variantLabel = (variant: CatalogCosmetic) =>
+    `${variant.variant_name ?? variant.name ?? "Variant"} (#${variant.id})`;
+
+function pickedEntries(files: File[]) {
     return Promise.all(
         files
-            .filter((file) => !isMacosJunk(relativePath(file)))
+            .filter((file) => !isJunkPath(relativePath(file)))
             .map(async (file) => {
                 const segments = relativePath(file).split("/");
                 const inner = segments.length > 1 ? segments.slice(1).join("/") : file.name;
-                return [inner, new Uint8Array(await file.arrayBuffer())] as const;
+                return { name: inner, bytes: new Uint8Array(await file.arrayBuffer()) };
             }),
-    ).then((entries) => zipSync(Object.fromEntries(entries)));
+    );
+}
+
+/** Zips a picked folder in the browser, dropping its top-level directory. */
+async function buildBundle(files: File[]) {
+    const entries = await pickedEntries(files);
+    return { entries, zipped: zipSync(Object.fromEntries(entries.map((entry) => [entry.name, entry.bytes]))) };
 }
 
 /** Files picked for one upload: a single file, or a whole folder. */
@@ -106,13 +149,134 @@ interface Picked {
 }
 const NOTHING: Picked = { files: [], folder: false };
 
-async function appendFile(form: FormData, picked: Picked) {
+interface Prepared {
+    file: NamedBlob;
+    info: BundleInfo;
+}
+
+async function preparePicked(picked: Picked): Promise<Prepared> {
     if (picked.folder) {
-        const zipped = await buildBundle(picked.files);
-        form.append("file", new Blob([zipped as BlobPart], { type: "application/zip" }), "bundle.zip");
-    } else {
-        form.append("file", picked.files[0], picked.files[0].name);
+        const { entries, zipped } = await buildBundle(picked.files);
+        return {
+            file: { blob: new Blob([zipped as BlobPart], { type: "application/zip" }), name: "bundle.zip" },
+            info: inspectFiles(entries, zipped.length),
+        };
     }
+    const file = picked.files[0];
+    return {
+        file: { blob: file, name: file.name },
+        info: inspectSingle(file.name, new Uint8Array(await file.arrayBuffer())),
+    };
+}
+
+async function prepareChecked(type: string, picked: Picked): Promise<NamedBlob> {
+    const prepared = await preparePicked(picked);
+    const problems = bundleProblems(type, prepared.info);
+    if (problems.length) throw new Error(problems.join(" "));
+    return prepared.file;
+}
+
+interface FileReport {
+    problems: string[];
+    issues: Issue[];
+    invalid: boolean;
+    unchecked: boolean;
+    variantKeys: string[];
+    colorways: string[];
+    manifest: boolean;
+    effectContent?: EffectContent;
+}
+type ReportState = FileReport | "busy" | null;
+
+async function reportFor(type: string, picked: Picked): Promise<FileReport> {
+    const { file, info } = await preparePicked(picked);
+    const manifest = hasRootManifest(info);
+    const base: FileReport = {
+        problems: bundleProblems(type, info),
+        issues: [],
+        invalid: false,
+        unchecked: false,
+        variantKeys: type === "nameplate" && manifest ? manifestVariantKeys(info.manifest) : [],
+        colorways: [],
+        manifest,
+    };
+    if (base.problems.length) return base;
+    let engine: EngineReport;
+    try {
+        engine = await checkBundle(type, file.blob);
+    } catch {
+        return { ...base, unchecked: true };
+    }
+    return {
+        ...base,
+        issues: engine.issues,
+        invalid: blocksUpload(engine),
+        variantKeys: type === "nameplate" && engine.variantKeys?.length ? engine.variantKeys : base.variantKeys,
+        colorways: engine.colorways ?? [],
+        effectContent: engine.effectContent,
+    };
+}
+
+function useBundleReport(type: string, picked: Picked): ReportState {
+    const [report, setReport] = useState<ReportState>(null);
+    const { files, folder } = picked;
+
+    useEffect(() => {
+        if (!files.length) {
+            setReport(null);
+            return;
+        }
+        let live = true;
+        setReport("busy");
+        reportFor(type, { files, folder }).then(
+            (next) => live && setReport(next),
+            (error: Error) => {
+                if (!live) return;
+                setReport({
+                    problems: [`The files can't be read: ${error.message}`],
+                    issues: [],
+                    invalid: false,
+                    unchecked: false,
+                    variantKeys: [],
+                    colorways: [],
+                    manifest: false,
+                });
+            },
+        );
+        return () => {
+            live = false;
+        };
+    }, [type, files, folder]);
+
+    return report;
+}
+
+const reportProblems = (report: ReportState) => (report && report !== "busy" ? report.problems : []);
+const reportKeys = (report: ReportState) => (report && report !== "busy" ? report.variantKeys : []);
+const reportManifest = (report: ReportState) => (report && report !== "busy" ? report.manifest : false);
+const reportColorways = (report: ReportState) => (report && report !== "busy" ? report.colorways : []);
+const reportInvalid = (report: ReportState) => (report && report !== "busy" ? report.invalid : false);
+const keySuggestions = (keys: string[], report: ReportState) => (keys.length ? keys : reportColorways(report));
+
+const coverFile = (blob: Blob) => new File([blob], "preview-cover.png", { type: "image/png" });
+
+async function checkCover(file: File): Promise<string[]> {
+    try {
+        const bitmap = await createImageBitmap(file);
+        const size = { width: bitmap.width, height: bitmap.height };
+        bitmap.close();
+        return coverProblems(file, size);
+    } catch {
+        const problems = coverProblems(file);
+        return problems.length ? problems : ["The cover can't be read as an image."];
+    }
+}
+
+async function adoptCover(blob: Blob, use: (file: File) => void): Promise<string[]> {
+    const file = coverFile(blob);
+    const problems = await checkCover(file);
+    if (!problems.length) use(file);
+    return problems;
 }
 
 function useCreateCosmetic() {
@@ -135,8 +299,9 @@ function CosmeticsRoute() {
                         Cosmetics
                     </h1>
                     <p className="mt-1 text-sm text-gray-500">
-                        Upload, edit and disable cosmetics and emotes. Uploading never
-                        puts anything on sale — price it from Store → Products.
+                        Upload, edit and disable cosmetics and emotes. A new cosmetic isn't on sale
+                        until you price it from Store → Products, but a variant added to a group
+                        that's already on sale is sold with it.
                     </p>
                 </div>
                 {!creating && (
@@ -159,8 +324,19 @@ interface Draft extends Picked {
     key: string;
     label: string;
     model: "" | "slim" | "wide";
+    variantKey: string;
+    reuse: string;
+    cover: File | null;
 }
-const newDraft = (): Draft => ({ ...NOTHING, key: crypto.randomUUID(), label: "", model: "" });
+const newDraft = (): Draft => ({
+    ...NOTHING,
+    key: crypto.randomUUID(),
+    label: "",
+    model: "",
+    variantKey: "",
+    reuse: "",
+    cover: null,
+});
 
 type UploadState = "busy" | "done" | Error;
 
@@ -171,58 +347,210 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
     const [slots, setSlots] = useState<BodySlot[]>([]);
+    const [slotsPicked, setSlotsPicked] = useState(false);
     const [withVariants, setWithVariants] = useState(false);
+    const [publishNow, setPublishNow] = useState(false);
     const [drafts, setDrafts] = useState<Draft[]>([newDraft()]);
     const [previewKey, setPreviewKey] = useState(drafts[0].key);
     const [states, setStates] = useState<Record<string, UploadState>>({});
+    const [outcomes, setOutcomes] = useState<Record<string, UploadOutcome>>({});
+    const [createdIds, setCreatedIds] = useState<Record<string, number>>({});
+    const [reports, setReports] = useState<Record<string, ReportState>>({});
     const [coverSeconds, setCoverSeconds] = useState<number | null>(null);
+    const [captureProblems, setCaptureProblems] = useState<string[]>([]);
+    const [autoCovers, setAutoCovers] = useState<Record<string, AutoCover>>({});
+    const [joined, setJoined] = useState<GroupState | null>(null);
+    const [groupPublish, setGroupPublish] = useState<UploadState | null>(null);
+    const [publishFailed, setPublishFailed] = useState(false);
+    const [uploadFailed, setUploadFailed] = useState(false);
+    const [afterPublish, setAfterPublish] = useState<GroupState | null | undefined>(undefined);
+    const [catalogSince, setCatalogSince] = useState(0);
     const create = useCreateCosmetic();
+    const publishGroup = useAdminMutation<number>((id) => ({
+        method: "POST",
+        path: "/cosmetics/manage/update",
+        body: { cosmetic_id: id, enabled: true },
+    }));
 
     const isEmote = type === "emote";
+    const isNameplate = type === "nameplate";
     const grouped = withVariants && !isEmote;
     const shownDrafts = grouped ? drafts : drafts.slice(0, 1);
-    // The backend finds groups by name and type, so a taken name adds to it.
-    const existingGroup = cosmeticUnits(catalog.data).find(
-        (unit) => unit.group_id !== null && unit.type === type && unit.name === name.trim(),
-    );
-    const uploading = Object.values(states).includes("busy");
     const allDone = shownDrafts.every((draft) => states[draft.key] === "done");
+    const anyDone = shownDrafts.some((draft) => states[draft.key] === "done");
+    const groupUnknown = grouped && type !== null && !anyDone && !catalogCheckedSince(catalog, catalogSince);
+    // The backend finds groups by name and type, so a taken name adds to it.
+    const found = grouped && type && catalog.data ? findUploadGroup(catalog.data, type, name) : null;
+    const existingVariants = found?.unit?.variants ?? [];
+    const uploading = Object.values(states).includes("busy") || groupPublish === "busy";
+    const liveGroup = found ? groupState(found) : null;
+    const targetGroup = anyDone ? joined : liveGroup;
+    const visibility = uploadVisibility(type ?? "", targetGroup, publishNow);
+    const shownGroup = afterPublish === undefined ? targetGroup : afterPublish;
+    const saleHint = groupUnknown
+        ? "Checking the library to see whether this group is already on sale."
+        : grouped && afterPublish === null
+          ? UNCHECKED_SALE_HINT
+          : uploadSaleHint(
+                grouped ? shownGroup : null,
+                allDone,
+                !shownGroup || shownGroup.enabled || (!allDone && !uploadFailed && visibility.publishGroup),
+                allDone && publishFailed,
+            );
+    const finished = allDone && (!visibility.publishGroup || groupPublish === "done");
+    const slotError = type ? validateSlots(type, isEmote ? [] : slots) : null;
+    const effectGuess = useMemo(() => {
+        if (type !== "effect") return null;
+        const ready = shownDrafts.map((draft) => reports[draft.key]);
+        if (ready.some((report) => report === null || report === undefined || report === "busy")) return null;
+        const checked = ready as FileReport[];
+        const readable = checked.every((report) => report.effectContent !== undefined && !report.invalid && report.problems.length === 0);
+        return inferEffectSlots(
+            readable
+                ? {
+                      trails: checked.some((report) => report.effectContent?.trails),
+                      moments: checked.some((report) => report.effectContent?.moments),
+                  }
+                : null,
+        );
+    }, [type, shownDrafts, reports]);
+    const guessedSlots = effectGuess ? effectGuess.slots.join(",") : null;
+    useEffect(() => {
+        if (type !== "effect" || slotsPicked) return;
+        setSlots(guessedSlots ? (guessedSlots.split(",") as BodySlot[]) : []);
+    }, [type, guessedSlots, slotsPicked]);
+    const anyManifest = shownDrafts.some((draft) => reportManifest(reports[draft.key]));
+    const coversByUpload = type !== null && coverMode(type, anyManifest) === "upload";
+
+    const onReport = useCallback(
+        (key: string, report: ReportState) => setReports((all) => (all[key] === report ? all : { ...all, [key]: report })),
+        [],
+    );
+    const onAutoCover = useCallback(
+        (key: string, cover: AutoCover) => setAutoCovers((all) => (all[key] === cover ? all : { ...all, [key]: cover })),
+        [],
+    );
+
+    const sourceDraft = (draft: Draft) =>
+        draft.reuse.startsWith("draft:") ? drafts.find((other) => other.key === draft.reuse.slice(6)) : undefined;
+    const sourceCosmetic = (draft: Draft) =>
+        draft.reuse.startsWith("cosmetic:")
+            ? existingVariants.find((variant) => variant.id === Number(draft.reuse.slice(9)))
+            : undefined;
+    const bundleKeysFor = (draft: Draft) => reportKeys(reports[sourceDraft(draft)?.key ?? draft.key]);
+    const sourceOf = (draft: Draft): PreviewSource | null => {
+        const files = sourceDraft(draft)?.files ?? draft.files;
+        return files.length ? files : (sourceCosmetic(draft)?.url ?? null);
+    };
+    const coverNeeded = (draft: Draft) =>
+        type !== null && needsDashboardCover(type, reportManifest(reports[sourceDraft(draft)?.key ?? draft.key]));
+    const coverRequest = (draft: Draft): CoverRequest | null => {
+        const source = sourceOf(draft);
+        if (!type || !source || draft.cover || states[draft.key] === "done" || !coverNeeded(draft)) return null;
+        return { source, type, variantKey: draft.variantKey.trim() || null };
+    };
+    const coverFor = (draft: Draft) => draft.cover ?? autoCovers[draft.key]?.file ?? null;
+    const makingCovers = shownDrafts.some((draft) => coverRequest(draft) && autoCovers[draft.key]?.busy !== false);
+
+    const draftProblems = (draft: Draft) => {
+        const others = shownDrafts.filter((other) => other.key !== draft.key).map((other) => other.variantKey.trim());
+        const taken = [...others, ...existingVariants.map((variant) => variant.variant_key)];
+        return [
+            ...(draft.reuse ? [] : reportProblems(reports[draft.key])),
+            ...variantKeyProblems(type ?? "", draft.variantKey, bundleKeysFor(draft), grouped ? taken : []),
+        ];
+    };
 
     const stepValid = [
         type !== null,
-        name.trim() !== "" && (isEmote || slots.length > 0),
-        shownDrafts.every((draft) => draft.files.length > 0 && (!grouped || draft.label.trim())),
+        name.trim() !== "" && (type === "effect" || slotError === null) && !groupUnknown,
+        shownDrafts.every(
+            (draft) =>
+                (type !== "effect" || slotError === null) &&
+                (draft.reuse || draft.files.length > 0) &&
+                (!grouped || draft.label.trim()) &&
+                reports[draft.key] !== "busy" &&
+                (draft.reuse !== "" || !reportInvalid(reports[draft.key])) &&
+                draftProblems(draft).length === 0,
+        ),
         true,
     ];
 
+    const goTo = (next: number) => {
+        if (next === 1 || next === 3) {
+            setCatalogSince(Date.now());
+            void catalog.refetch();
+        }
+        setStep(next);
+    };
+
     const patchDraft = (key: string, patch: Partial<Draft>) =>
-        setDrafts(drafts.map((draft) => (draft.key === key ? { ...draft, ...patch } : draft)));
+        setDrafts((all) => all.map((draft) => (draft.key === key ? { ...draft, ...patch } : draft)));
 
     const uploadAll = async () => {
-        const baseOrder = existingGroup ? Math.max(...existingGroup.variants.map((v) => v.variant_order)) + 1 : 0;
+        if (groupUnknown) return;
+        const group = targetGroup;
+        if (!anyDone) setJoined(liveGroup);
+        const plan = uploadVisibility(type!, group, publishNow);
+        const baseOrder = existingVariants.length ? Math.max(...existingVariants.map((v) => v.variant_order)) + 1 : 0;
+        const created = { ...createdIds };
         for (const [index, draft] of shownDrafts.entries()) {
             if (states[draft.key] === "done") continue;
             setStates((all) => ({ ...all, [draft.key]: "busy" }));
             try {
-                const form = new FormData();
-                await appendFile(form, draft);
-                form.append("type", type!);
-                form.append("name", name.trim());
-                if (description.trim()) form.append("description", description.trim());
-                if (coverSeconds !== null) form.append("cover_seconds", String(coverSeconds));
-                for (const slot of isEmote ? [] : slots) form.append("slots", slot);
-                if (grouped) {
-                    form.append("group", name.trim());
-                    form.append("variant_name", draft.label.trim());
-                    form.append("variant_order", String(baseOrder + index));
-                    if (draft.model) form.append("model_variant", draft.model);
+                let file: NamedBlob | null = null;
+                let assetFrom: number | undefined;
+                if (draft.reuse.startsWith("draft:")) {
+                    assetFrom = created[draft.reuse.slice(6)];
+                    if (assetFrom === undefined) throw new Error("The variant it shares a file with hasn't uploaded yet.");
+                } else if (draft.reuse.startsWith("cosmetic:")) {
+                    assetFrom = Number(draft.reuse.slice(9));
+                } else {
+                    file = await prepareChecked(type!, draft);
                 }
-                await create.mutateAsync(form);
+                const cover = coverFor(draft);
+                const form = buildCreateForm(
+                    {
+                        type: type!,
+                        name,
+                        description,
+                        slots: isEmote ? [] : slots,
+                        group: grouped ? name : undefined,
+                        variantName: draft.label,
+                        variantOrder: baseOrder + index,
+                        modelVariant: draft.model,
+                        variantKey: draft.variantKey,
+                        coverSeconds: coverNeeded(draft) ? null : coverSeconds,
+                        enabled: plan.enabled,
+                        assetFrom,
+                    },
+                    file,
+                    cover ? { blob: cover, name: cover.name } : null,
+                );
+                const outcome = parseUploadOutcome(await create.mutateAsync(form));
+                if (outcome.cosmeticId !== null) created[draft.key] = outcome.cosmeticId;
+                setCreatedIds({ ...created });
+                setOutcomes((all) => ({ ...all, [draft.key]: outcome }));
                 setStates((all) => ({ ...all, [draft.key]: "done" }));
             } catch (error) {
                 setStates((all) => ({ ...all, [draft.key]: error as Error }));
+                setUploadFailed(true);
                 return;
             }
+        }
+        const publishId = group?.id ?? Object.values(created)[0];
+        if (plan.publishGroup && group && publishId !== undefined && groupPublish !== "done") {
+            setGroupPublish("busy");
+            let result: UploadState;
+            try {
+                await publishGroup.mutateAsync(publishId);
+                result = "done";
+            } catch (error) {
+                result = error as Error;
+            }
+            setAfterPublish(groupAfterPublish(await catalog.refetch(), publishId, group, result === "done"));
+            setGroupPublish(result);
+            setPublishFailed(result !== "done");
         }
     };
 
@@ -232,6 +560,28 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
     };
 
     const preview = shownDrafts.find((draft) => draft.key === previewKey) ?? shownDrafts[0];
+    const previewSource = sourceOf(preview);
+    const shownKey = preview.variantKey.trim();
+    const previewColorways = reportColorways(reports[sourceDraft(preview)?.key ?? preview.key]);
+
+    const draftSummary = (draft: Draft) => {
+        const source = sourceDraft(draft);
+        if (source) return `Same file as ${source.label.trim() || "an earlier variant"}`;
+        const cosmetic = sourceCosmetic(draft);
+        if (cosmetic) return `Same file as ${variantLabel(cosmetic)}`;
+        return pickedSummary(draft);
+    };
+
+    const reuseOptions = (draft: Draft, index: number) => [
+        ...shownDrafts
+            .slice(0, index)
+            .filter((other) => !other.reuse && other.files.length)
+            .map((other) => ({ value: `draft:${other.key}`, label: `Same file as ${other.label.trim() || "an earlier variant"}` })),
+        ...existingVariants.map((variant) => ({
+            value: `cosmetic:${variant.id}`,
+            label: `Same file as ${variantLabel(variant)}`,
+        })),
+    ].filter((option) => option.value !== `draft:${draft.key}`);
 
     return (
         <div className="flex flex-col gap-6 rounded-lg bg-gray-800 p-6 shadow-xl">
@@ -244,7 +594,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                                 type="button"
                                 // Only steps already reached can be jumped back to.
                                 disabled={index >= step || uploading || allDone}
-                                onClick={() => setStep(index)}
+                                onClick={() => goTo(index)}
                                 className={`flex items-center gap-2 rounded-full px-3 py-1 ${
                                     index === step
                                         ? "bg-[#61dafb] font-semibold text-gray-900"
@@ -271,9 +621,13 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                             <button
                                 key={t}
                                 onClick={() => {
-                                    if (t !== type) setSlots(DEFAULT_SLOTS[t]);
+                                    if (t !== type) {
+                                        setSlots(t === "effect" ? [] : DEFAULT_SLOTS[t]);
+                                        setSlotsPicked(false);
+                                        setDrafts(drafts.map((draft) => ({ ...draft, reuse: "" })));
+                                    }
                                     setType(t);
-                                    setStep(1);
+                                    goTo(1);
                                 }}
                                 className={`rounded-lg border px-4 py-5 text-left capitalize transition ${
                                     t === type
@@ -282,23 +636,21 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                                 }`}
                             >
                                 <div className="font-semibold">{t}</div>
-                                <div className="mt-1 text-xs normal-case text-gray-500">
-                                    {t === "emote" ? "An animation the player performs" : `Worn on: ${DEFAULT_SLOTS[t].join(", ")}`}
-                                </div>
+                                <div className="mt-1 text-xs normal-case text-gray-500">{typeHint(t)}</div>
                             </button>
                         ))}
                     </div>
                 </Step>
             )}
 
-            {step === 1 && (
+            {step === 1 && type && (
                 <Step title="Name it" hint="Players see the name and description in the store and wardrobe.">
                     <div className="flex max-w-2xl flex-col gap-4">
                         <Field label="Name">
                             <input
                                 value={name}
                                 onChange={(event) => setName(event.target.value)}
-                                placeholder="Pride Cape"
+                                placeholder={isNameplate ? "Gold Nameplate" : type === "effect" ? "Spark Trail" : "Pride Cape"}
                                 autoFocus
                                 className={inputClass}
                             />
@@ -326,30 +678,56 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                                             active={withVariants}
                                             onClick={() => setWithVariants(true)}
                                             title="Yes, several variants"
-                                            hint="E.g. colours, or slim/wide arms. Players buy it once and pick a variant."
+                                            hint={
+                                                isNameplate
+                                                    ? "E.g. colorways from one bundle. Players buy it once and pick a variant."
+                                                    : "E.g. colors, or slim/wide arms. Players buy it once and pick a variant."
+                                            }
                                         />
                                     </div>
                                 </div>
-                                {grouped && existingGroup && (
+                                {found && (
                                     <p className="rounded border border-sky-800 bg-sky-900/30 px-3 py-2 text-sm text-sky-200">
-                                        A {type} called “{existingGroup.name}” already has{" "}
-                                        {existingGroup.variants.length} variant(s). The ones you add here join it.
+                                        {existingVariants.length
+                                            ? `A ${type} called “${found.group.name}” already has ${existingVariants.length} variant(s). The ones you add here join it.`
+                                            : `A ${type} group called “${found.group.name}” already exists. The variants you add here join it.`}
                                     </p>
                                 )}
-                                <details className="text-sm text-gray-400">
-                                    <summary className="cursor-pointer select-none">
-                                        Body slots: {slots.join(", ") || "none"}{" "}
-                                        <span className="text-gray-600">(defaults for {type}; change only if needed)</span>
-                                    </summary>
-                                    <div className="mt-2">
-                                        <CheckList
-                                            items={BODY_SLOTS.map((slot) => ({ id: slot, label: slot }))}
-                                            selected={slots}
-                                            onChange={setSlots}
-                                        />
-                                    </div>
-                                </details>
+                                {groupUnknown && (
+                                    <GroupCheck
+                                        type={type}
+                                        error={catalog.isError ? catalog.error : null}
+                                        retrying={catalog.isFetching}
+                                        onRetry={() => void catalog.refetch()}
+                                    />
+                                )}
+                                {type !== "effect" && (
+                                    <>
+                                        <details className="text-sm text-gray-400">
+                                            <summary className="cursor-pointer select-none">
+                                                Body slots: {slots.join(", ") || "none"}{" "}
+                                                <span className="text-gray-600">(defaults for {type}; change only if needed)</span>
+                                            </summary>
+                                            <div className="mt-2">
+                                                <CheckList
+                                                    items={slotItems(type)}
+                                                    selected={slots as string[]}
+                                                    onChange={(next) => setSlots(next as BodySlot[])}
+                                                />
+                                            </div>
+                                        </details>
+                                        {slotError && <p className="text-sm text-red-300">{slotError}</p>}
+                                    </>
+                                )}
                             </>
+                        )}
+                        {visibility.hint && !groupUnknown && (
+                            <div className="flex flex-col gap-1">
+                                {visibility.toggle && (
+                                    <Toggle label={visibility.toggle} checked={publishNow} onChange={setPublishNow} />
+                                )}
+                                <p className="text-xs text-gray-500">{visibility.hint}</p>
+                            </div>
                         )}
                     </div>
                 </Step>
@@ -359,51 +737,48 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                 <Step title={grouped ? "Add the variants" : "Pick the file"} hint={fileHint(type)}>
                     <div className="grid gap-6 md:grid-cols-[1fr_320px]">
                         <div className="flex flex-col gap-3">
-                            {shownDrafts.map((draft, index) => (
-                                <div
-                                    key={draft.key}
-                                    onFocusCapture={() => setPreviewKey(draft.key)}
-                                    onClick={() => setPreviewKey(draft.key)}
-                                    className={`flex flex-col gap-3 rounded-lg border p-4 ${
-                                        preview.key === draft.key ? "border-[#61dafb]/60" : "border-gray-700"
-                                    }`}
-                                >
-                                    {grouped && (
-                                        <div className="flex flex-wrap items-end gap-3">
-                                            <Field label={`Variant ${index + 1} label`}>
-                                                <input
-                                                    value={draft.label}
-                                                    onChange={(event) => patchDraft(draft.key, { label: event.target.value })}
-                                                    placeholder={["Red", "Blue", "Green"][index % 3]}
-                                                    className={inputClass}
-                                                />
-                                            </Field>
-                                            <Field label="Skin model">
-                                                <select
-                                                    value={draft.model}
-                                                    onChange={(event) =>
-                                                        patchDraft(draft.key, { model: event.target.value as Draft["model"] })
-                                                    }
-                                                    className={inputClass}
-                                                >
-                                                    <option value="">Any</option>
-                                                    <option value="slim">Slim only</option>
-                                                    <option value="wide">Wide only</option>
-                                                </select>
-                                            </Field>
-                                            {drafts.length > 1 && (
-                                                <button
-                                                    onClick={() => setDrafts(drafts.filter((d) => d.key !== draft.key))}
-                                                    title="Remove variant"
-                                                    className="mb-2 text-gray-500 hover:text-red-300"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            )}
-                                        </div>
+                            {type === "effect" && (
+                                <div className="flex flex-col gap-2 rounded border border-gray-700 bg-gray-900/40 p-3 text-sm text-gray-400">
+                                    <span>Body slots: {slots.join(", ") || "none"}</span>
+                                    <CheckList
+                                        items={slotItems(type)}
+                                        selected={slots as string[]}
+                                        onChange={(next) => {
+                                            setSlotsPicked(true);
+                                            setSlots(next as BodySlot[]);
+                                        }}
+                                    />
+                                    {effectGuess === null && <p className="text-xs text-gray-500">Add the file and the slot is picked from what's in it.</p>}
+                                    {effectGuess?.hint && !slotsPicked && (
+                                        <p className={`text-xs ${effectGuess.needsChoice ? "text-amber-300" : "text-gray-500"}`}>{effectGuess.hint}</p>
                                     )}
-                                    <FilePicker picked={draft} onChange={(picked) => patchDraft(draft.key, picked)} />
+                                    {slotError && <p className="text-sm text-red-300">{slotError}</p>}
                                 </div>
+                            )}
+                            {shownDrafts.map((draft, index) => (
+                                <DraftCard
+                                    key={draft.key}
+                                    type={type}
+                                    draft={draft}
+                                    index={index}
+                                    grouped={grouped}
+                                    selected={preview.key === draft.key}
+                                    removable={grouped && drafts.length > 1}
+                                    reuseOptions={isNameplate && grouped ? reuseOptions(draft, index) : []}
+                                    bundleKeys={bundleKeysFor(draft)}
+                                    suggestions={keySuggestions(bundleKeysFor(draft), reports[sourceDraft(draft)?.key ?? draft.key])}
+                                    problems={draftProblems(draft)}
+                                    onSelect={() => setPreviewKey(draft.key)}
+                                    onPatch={(patch) => patchDraft(draft.key, patch)}
+                                    onRemove={() =>
+                                        setDrafts(
+                                            drafts
+                                                .filter((d) => d.key !== draft.key)
+                                                .map((d) => (d.reuse === `draft:${draft.key}` ? { ...d, reuse: "" } : d)),
+                                        )
+                                    }
+                                    onReport={onReport}
+                                />
                             ))}
                             {grouped && (
                                 <button
@@ -424,13 +799,30 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                                 Preview{grouped && preview.label ? `: ${preview.label}` : ""}
                             </span>
                             <CosmeticPreview
-                                source={preview.files.length ? preview.files : null}
+                                source={previewSource}
                                 type={type}
                                 bodySlot={slots[0] ?? previewSlot(type)}
                                 className="h-96 w-full"
-                                frozenAt={coverSeconds}
+                                frozenAt={coversByUpload ? null : coverSeconds}
+                                variantKey={isNameplate ? shownKey || null : null}
+                                colorway={shownKey && previewColorways.includes(shownKey) ? shownKey : undefined}
+                                onCoverBlob={(blob) =>
+                                    void adoptCover(blob, (cover) => patchDraft(preview.key, { cover })).then(setCaptureProblems)
+                                }
                             />
-                            <FramePicker value={coverSeconds} onChange={setCoverSeconds} />
+                            {captureProblems.length > 0 && <ProblemList problems={captureProblems} />}
+                            {coversByUpload ? (
+                                <p className="text-xs text-gray-500">
+                                    {type === "effect" || isNameplate
+                                        ? `The server doesn't make covers for ${type}s,`
+                                        : "The server doesn't make covers for bundles with a manifest.json,"}{" "}
+                                    so one is made from the preview and shown on the next step. To pick the frame
+                                    yourself, press Save as cover under the preview
+                                    {grouped ? ` for ${preview.label.trim() || "this variant"}` : ""} or add a PNG.
+                                </p>
+                            ) : (
+                                <FramePicker value={coverSeconds} onChange={setCoverSeconds} />
+                            )}
                         </div>
                     </div>
                 </Step>
@@ -439,11 +831,7 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
             {step === 3 && type && (
                 <Step
                     title={allDone ? "Uploaded" : "Review and upload"}
-                    hint={
-                        allDone
-                            ? "It's in the library, not on sale. Price it from Store → Products when it's ready."
-                            : "Nothing is put on sale; price it from Store → Products afterwards."
-                    }
+                    hint={saleHint}
                 >
                     <div className="flex max-w-2xl flex-col gap-4">
                         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
@@ -457,44 +845,60 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
                                     <dd className="text-gray-200">{slots.join(", ")}</dd>
                                 </>
                             )}
+                            {visibility.summary && (
+                                <>
+                                    <dt className="text-gray-500">Visibility</dt>
+                                    <dd className="text-gray-200">{visibility.summary}</dd>
+                                </>
+                            )}
                         </dl>
                         <ul className="flex flex-col divide-y divide-gray-700 rounded-lg border border-gray-700">
-                            {shownDrafts.map((draft) => {
-                                const state = states[draft.key];
-                                return (
-                                    <li key={draft.key} className="flex flex-col gap-1 px-4 py-3 text-sm">
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-gray-200">{grouped ? draft.label : name.trim()}</span>
-                                            {draft.model && <Badge>{draft.model}</Badge>}
-                                            <span className="truncate text-xs text-gray-500">{pickedSummary(draft)}</span>
-                                            <span className="ml-auto shrink-0">
-                                                {state === "done" ? (
-                                                    <Badge tone="green">uploaded</Badge>
-                                                ) : state === "busy" ? (
-                                                    <Badge tone="blue">uploading…</Badge>
-                                                ) : state instanceof Error ? (
-                                                    <Badge tone="red">failed</Badge>
-                                                ) : (
-                                                    <Badge>ready</Badge>
-                                                )}
-                                            </span>
-                                        </div>
-                                        {state instanceof Error && <ErrorBanner error={state} />}
-                                    </li>
-                                );
-                            })}
+                            {shownDrafts.map((draft) => (
+                                <ReviewRow
+                                    key={draft.key}
+                                    draft={draft}
+                                    title={grouped ? draft.label : name.trim()}
+                                    summary={draftSummary(draft)}
+                                    state={states[draft.key]}
+                                    outcome={outcomes[draft.key] ?? null}
+                                    showCover={states[draft.key] !== "done" && (coverNeeded(draft) || draft.cover !== null)}
+                                    request={coverRequest(draft)}
+                                    onAutoCover={onAutoCover}
+                                    onCover={(cover) => patchDraft(draft.key, { cover })}
+                                />
+                            ))}
                         </ul>
-                        {allDone ? (
+                        {groupUnknown && (
+                            <GroupCheck
+                                type={type}
+                                error={catalog.isError ? catalog.error : null}
+                                retrying={catalog.isFetching}
+                                onRetry={() => void catalog.refetch()}
+                            />
+                        )}
+                        {allDone && groupPublish instanceof Error && (
+                            <div className="flex flex-col gap-2">
+                                <p className="text-sm text-amber-300">{publishProblem(afterPublish ?? null)}</p>
+                                <ProblemBanner error={groupPublish} />
+                            </div>
+                        )}
+                        {finished ? (
                             <button onClick={onClose} className={primaryButton}>
                                 <Check size={16} />
                                 Back to the library
                             </button>
                         ) : (
-                            <button onClick={uploadAll} disabled={uploading} className={primaryButton}>
+                            <button onClick={uploadAll} disabled={uploading || makingCovers || groupUnknown} className={primaryButton}>
                                 <Upload size={16} />
                                 {uploading
                                     ? "Uploading…"
-                                    : Object.keys(states).length
+                                    : allDone
+                                      ? afterPublish?.enabled
+                                        ? "Try the store update again"
+                                        : "Make the group live"
+                                      : makingCovers
+                                      ? "Making covers…"
+                                      : Object.keys(states).length
                                       ? "Retry the rest"
                                       : `Upload ${shownDrafts.length > 1 ? `${shownDrafts.length} variants` : isEmote ? "emote" : "cosmetic"}`}
                             </button>
@@ -505,16 +909,230 @@ function CreateWizard({ onClose }: { onClose: () => void }) {
 
             {step > 0 && step < 3 && (
                 <div className="flex justify-between border-t border-gray-700 pt-4">
-                    <button onClick={() => setStep(step - 1)} className={secondaryButton}>
+                    <button onClick={() => goTo(step - 1)} className={secondaryButton}>
                         <ArrowLeft size={16} />
                         Back
                     </button>
-                    <button onClick={() => setStep(step + 1)} disabled={!stepValid[step]} className={primaryButton}>
+                    <button onClick={() => goTo(step + 1)} disabled={!stepValid[step]} className={primaryButton}>
                         Next
                         <ArrowRight size={16} />
                     </button>
                 </div>
             )}
+        </div>
+    );
+}
+
+function GroupCheck({
+    type,
+    error,
+    retrying,
+    onRetry,
+}: {
+    type: string;
+    error: unknown;
+    retrying: boolean;
+    onRetry: () => void;
+}) {
+    if (!error) {
+        return (
+            <p className="text-sm text-gray-400">
+                Checking the library for an existing {type} with this name…
+            </p>
+        );
+    }
+    return (
+        <div className="flex flex-col gap-2 rounded border border-red-700 bg-red-900/40 px-3 py-2 text-sm text-red-200">
+            <p>
+                The library didn't load, so we can't check whether a {type} with this name already exists. If it
+                does, these variants join it and go on sale with it. Try again to continue.
+            </p>
+            <p className="text-xs text-red-300">{(error as Error).message}</p>
+            <button type="button" onClick={onRetry} disabled={retrying} className={`${secondaryButton} self-start`}>
+                <RefreshCw size={14} />
+                {retrying ? "Retrying…" : "Retry"}
+            </button>
+        </div>
+    );
+}
+
+function ReviewRow({
+    draft,
+    title,
+    summary,
+    state,
+    outcome,
+    showCover,
+    request,
+    onAutoCover,
+    onCover,
+}: {
+    draft: Draft;
+    title: string;
+    summary: string;
+    state: UploadState | undefined;
+    outcome: UploadOutcome | null;
+    showCover: boolean;
+    request: CoverRequest | null;
+    onAutoCover: (key: string, cover: AutoCover) => void;
+    onCover: (cover: File | null) => void;
+}) {
+    const auto = useAutoCover(request);
+    useEffect(() => onAutoCover(draft.key, auto), [draft.key, auto, onAutoCover]);
+
+    return (
+        <li className="flex flex-col gap-2 px-4 py-3 text-sm">
+            <div className="flex items-center gap-3">
+                <span className="text-gray-200">{title}</span>
+                {draft.model && <Badge>{draft.model}</Badge>}
+                {draft.variantKey.trim() && <Badge tone="blue">{draft.variantKey.trim()}</Badge>}
+                <span className="truncate text-xs text-gray-500">{summary}</span>
+                <span className="ml-auto shrink-0">
+                    {state === "done" ? (
+                        <Badge tone="green">uploaded</Badge>
+                    ) : state === "busy" ? (
+                        <Badge tone="blue">uploading…</Badge>
+                    ) : state instanceof Error ? (
+                        <Badge tone="red">failed</Badge>
+                    ) : (
+                        <Badge>ready</Badge>
+                    )}
+                </span>
+            </div>
+            {showCover && <AutoCoverPicker manual={draft.cover} auto={auto} onChange={onCover} />}
+            {state instanceof Error && <ProblemBanner error={state} />}
+            <OutcomeNotes outcome={outcome} />
+        </li>
+    );
+}
+
+function AutoCoverPicker({
+    manual,
+    auto,
+    onChange,
+}: {
+    manual: File | null;
+    auto: AutoCover;
+    onChange: (file: File | null) => void;
+}) {
+    return (
+        <div className="flex flex-col gap-1">
+            <CoverPicker
+                file={manual ?? auto.file}
+                auto={!manual && auto.file !== null}
+                pending={!manual && auto.busy}
+                onChange={onChange}
+                optional
+            />
+            {!manual && auto.error && (
+                <p className="text-xs text-amber-300">
+                    Couldn't make a cover from the preview ({auto.error}). Add one yourself, or upload without one.
+                </p>
+            )}
+        </div>
+    );
+}
+
+function DraftCard({
+    type,
+    draft,
+    index,
+    grouped,
+    selected,
+    removable,
+    reuseOptions,
+    bundleKeys,
+    suggestions,
+    problems,
+    onSelect,
+    onPatch,
+    onRemove,
+    onReport,
+}: {
+    type: CosmeticType;
+    draft: Draft;
+    index: number;
+    grouped: boolean;
+    selected: boolean;
+    removable: boolean;
+    reuseOptions: { value: string; label: string }[];
+    bundleKeys: string[];
+    suggestions: string[];
+    problems: string[];
+    onSelect: () => void;
+    onPatch: (patch: Partial<Draft>) => void;
+    onRemove: () => void;
+    onReport: (key: string, report: ReportState) => void;
+}) {
+    const report = useBundleReport(type, draft.reuse ? NOTHING : draft);
+    useEffect(() => onReport(draft.key, report), [draft.key, report, onReport]);
+    const skinned = type !== "nameplate" && type !== "effect";
+
+    return (
+        <div
+            onFocusCapture={onSelect}
+            onClick={onSelect}
+            className={`flex flex-col gap-3 rounded-lg border p-4 ${selected ? "border-[#61dafb]/60" : "border-gray-700"}`}
+        >
+            {(grouped || needsVariantKey(type, grouped)) && (
+                <div className="flex flex-wrap items-end gap-3">
+                    {grouped && (
+                        <Field label={`Variant ${index + 1} label`}>
+                            <input
+                                value={draft.label}
+                                onChange={(event) => onPatch({ label: event.target.value })}
+                                placeholder={["Red", "Blue", "Green"][index % 3]}
+                                className={inputClass}
+                            />
+                        </Field>
+                    )}
+                    {needsVariantKey(type, grouped) && (
+                        <VariantKeyField
+                            type={type}
+                            value={draft.variantKey}
+                            onChange={(variantKey) => onPatch({ variantKey })}
+                            suggestions={suggestions}
+                        />
+                    )}
+                    {grouped && skinned && (
+                        <Field label="Skin model">
+                            <select
+                                value={draft.model}
+                                onChange={(event) => onPatch({ model: event.target.value as Draft["model"] })}
+                                className={inputClass}
+                            >
+                                <option value="">Any</option>
+                                <option value="slim">Slim only</option>
+                                <option value="wide">Wide only</option>
+                            </select>
+                        </Field>
+                    )}
+                    {removable && (
+                        <button onClick={onRemove} title="Remove variant" className="mb-2 text-gray-500 hover:text-red-300">
+                            <Trash2 size={16} />
+                        </button>
+                    )}
+                </div>
+            )}
+            {reuseOptions.length > 0 && (
+                <Field label="File">
+                    <select
+                        value={draft.reuse}
+                        onChange={(event) => onPatch({ reuse: event.target.value })}
+                        className={inputClass}
+                    >
+                        <option value="">Its own file</option>
+                        {reuseOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
+                </Field>
+            )}
+            {!draft.reuse && <FilePicker picked={draft} onChange={(picked) => onPatch(picked)} />}
+            <BundleNotes report={draft.reuse ? null : report} problems={problems} keys={draft.reuse ? [] : bundleKeys} />
+            <CoverPicker file={draft.cover} onChange={(cover) => onPatch({ cover })} optional />
         </div>
     );
 }
@@ -549,7 +1167,7 @@ function Choice({ active, onClick, title, hint }: { active: boolean; onClick: ()
 function pickedSummary({ files, folder }: Picked): string {
     if (!files.length) return "No file chosen";
     if (!folder) return files[0].name;
-    const count = files.filter((file) => !isMacosJunk(relativePath(file))).length;
+    const count = files.filter((file) => !isJunkPath(relativePath(file))).length;
     return `${relativePath(files[0]).split("/")[0]}/ — ${count} file(s), zipped on upload`;
 }
 
@@ -592,6 +1210,160 @@ function FilePicker({ picked, onChange }: { picked: Picked; onChange: (picked: P
     );
 }
 
+function useObjectUrl(file: File | null): string | null {
+    const [url, setUrl] = useState<string | null>(null);
+    useEffect(() => {
+        if (!file) {
+            setUrl(null);
+            return;
+        }
+        const next = URL.createObjectURL(file);
+        setUrl(next);
+        return () => URL.revokeObjectURL(next);
+    }, [file]);
+    return url;
+}
+
+function CoverPicker({
+    file,
+    onChange,
+    optional = false,
+    auto = false,
+    pending = false,
+}: {
+    file: File | null;
+    onChange: (file: File | null) => void;
+    optional?: boolean;
+    auto?: boolean;
+    pending?: boolean;
+}) {
+    const input = useRef<HTMLInputElement>(null);
+    const [checking, setChecking] = useState(false);
+    const [problems, setProblems] = useState<string[]>([]);
+    const thumb = useObjectUrl(file);
+
+    const pick = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const picked = event.target.files?.[0];
+        event.target.value = "";
+        if (!picked) return;
+        setChecking(true);
+        const found = await checkCover(picked);
+        setChecking(false);
+        setProblems(found);
+        onChange(found.length ? null : picked);
+    };
+
+    return (
+        <div className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-3">
+                <button type="button" onClick={() => input.current?.click()} className={secondaryButton}>
+                    <ImagePlus size={16} />
+                    {auto ? "Replace cover" : file ? "Change cover" : optional ? "Add a cover" : "Choose cover"}
+                </button>
+                {thumb && <img src={thumb} alt="" className="h-10 w-10 rounded bg-gray-900 object-contain" />}
+                <span className={`truncate text-sm ${file ? "text-gray-200" : "text-gray-500"}`}>
+                    {checking
+                        ? "Checking…"
+                        : auto
+                          ? "Made from the preview"
+                          : file
+                            ? file.name
+                            : pending
+                              ? "Making one from the preview…"
+                              : "No cover chosen"}
+                </span>
+                {file && !auto && (
+                    <button
+                        type="button"
+                        onClick={() => onChange(null)}
+                        title="Remove cover"
+                        className="text-gray-500 hover:text-red-300"
+                    >
+                        <X size={14} />
+                    </button>
+                )}
+                <input ref={input} type="file" accept="image/png" hidden onChange={(event) => void pick(event)} />
+            </div>
+            {problems.length > 0 && <ProblemList problems={problems} />}
+            <span className="text-xs text-gray-600">
+                PNG, up to {formatBytes(MAX_COVER_BYTES)} and {MAX_COVER_SIDE}×{MAX_COVER_SIDE}.
+            </span>
+        </div>
+    );
+}
+
+function VariantKeyField({
+    type,
+    value,
+    onChange,
+    suggestions,
+    unknown = false,
+}: {
+    type: string;
+    value: string;
+    onChange: (value: string) => void;
+    suggestions: string[];
+    unknown?: boolean;
+}) {
+    const listId = useId();
+    const help = unknown
+        ? "The catalogue doesn't list this variant's key. Leave it empty to keep it."
+        : type === "nameplate"
+          ? "Must be a variant in the bundle's manifest, or “default” if the manifest lists no variants."
+          : "Optional. Unique in the group, so sets can ask for this exact variant.";
+
+    return (
+        <Field label="Variant key" help={help}>
+            <input
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                list={suggestions.length ? listId : undefined}
+                placeholder={suggestions[0] ?? (type === "nameplate" ? "default" : "gold")}
+                className={`${inputClass} font-mono`}
+            />
+            {suggestions.length > 0 && (
+                <datalist id={listId}>
+                    {suggestions.map((suggestion) => (
+                        <option key={suggestion} value={suggestion} />
+                    ))}
+                </datalist>
+            )}
+        </Field>
+    );
+}
+
+function BundleNotes({ report, problems, keys }: { report: ReportState; problems: string[]; keys: string[] }) {
+    const checked = report && report !== "busy" ? report : null;
+    return (
+        <>
+            {report === "busy" && <p className="text-xs text-gray-500">Checking the files…</p>}
+            {problems.length > 0 && <ProblemList problems={problems} />}
+            {checked?.invalid && (
+                <p className="text-sm text-red-300">This bundle can't be uploaded until the errors below are fixed.</p>
+            )}
+            {checked && <IssueList issues={checked.issues} />}
+            {checked?.unchecked && (
+                <p className="text-xs text-gray-500">The bundle checker didn't load, so only the size and manifest were checked.</p>
+            )}
+            {keys.length > 0 && (
+                <p className="text-xs text-gray-500">
+                    Variants in this bundle: <span className="font-mono">{keys.join(", ")}</span>
+                </p>
+            )}
+        </>
+    );
+}
+
+function ProblemList({ problems }: { problems: string[] }) {
+    return (
+        <ul className="list-disc pl-5 text-sm text-red-300">
+            {problems.map((problem) => (
+                <li key={problem}>{problem}</li>
+            ))}
+        </ul>
+    );
+}
+
 /* ---------- Library grid ---------- */
 
 function CosmeticGrid() {
@@ -608,7 +1380,10 @@ function CosmeticGrid() {
         (unit) =>
             (showDisabled || unit.enabled) &&
             (typeFilter === "all" || unit.type === typeFilter) &&
-            (!needle || `${unit.name} ${unit.variants.map((v) => v.id).join(" ")}`.toLowerCase().includes(needle)),
+            (!needle ||
+                `${unit.name} ${unit.variants.map((v) => `${v.id} ${v.variant_key ?? ""}`).join(" ")}`
+                    .toLowerCase()
+                    .includes(needle)),
     );
     // Looked up from all units so disabling one doesn't close its editor.
     const editingUnit = units.find((unit) => unit.key === editing);
@@ -619,7 +1394,7 @@ function CosmeticGrid() {
                 <input
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search name or ID…"
+                    placeholder="Search name, ID or key…"
                     className={`${inputClass} min-w-60 flex-1`}
                 />
                 <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className={inputClass}>
@@ -679,7 +1454,7 @@ function CosmeticGrid() {
                             </div>
                             {!unit.enabled && (
                                 <div>
-                                    <Badge tone="amber">disabled</Badge>
+                                    <Badge tone="amber">{unit.type === "nameplate" ? "hidden" : "disabled"}</Badge>
                                 </div>
                             )}
                         </div>
@@ -719,6 +1494,7 @@ function CosmeticEditor({ unit, onClose }: { unit: CosmeticUnit; onClose: () => 
         path: "/cosmetics/manage/update",
         body: { cosmetic_id: unit.first.id, enabled },
     }));
+    const hiddenNameplate = unit.type === "nameplate" && !unit.enabled;
 
     return (
         <div className="flex flex-col gap-6">
@@ -726,7 +1502,9 @@ function CosmeticEditor({ unit, onClose }: { unit: CosmeticUnit; onClose: () => 
                 <h2 className="text-xl font-bold text-gray-100">{unit.name}</h2>
                 <span className="font-mono text-xs text-gray-500">#{unit.first.id}</span>
                 <Badge>{unit.type}</Badge>
-                <Badge tone={unit.enabled ? "green" : "amber"}>{unit.enabled ? "enabled" : "disabled"}</Badge>
+                <Badge tone={unit.enabled ? "green" : "amber"}>
+                    {unit.enabled ? "enabled" : hiddenNameplate ? "hidden" : "disabled"}
+                </Badge>
                 <div className="ml-auto flex items-center gap-3">
                     <button
                         onClick={() => {
@@ -745,6 +1523,11 @@ function CosmeticEditor({ unit, onClose }: { unit: CosmeticUnit; onClose: () => 
                     </button>
                 </div>
             </div>
+            {hiddenNameplate && (
+                <p className="rounded border border-amber-800 bg-amber-900/30 px-3 py-2 text-sm text-amber-200">
+                    This nameplate is hidden, so players can't find it. Anyone who already owns it can still equip it.
+                </p>
+            )}
             <ErrorBanner error={setEnabled.error} />
             <div className="grid gap-6 md:grid-cols-[1fr_320px]">
                 <div className="flex flex-col gap-6">
@@ -760,32 +1543,83 @@ function CosmeticEditor({ unit, onClose }: { unit: CosmeticUnit; onClose: () => 
     );
 }
 
+function groupSlots(unit: CosmeticUnit): string[] {
+    if (unit.variants.every((variant) => variant.slots !== undefined)) {
+        const union = [...new Set(unit.variants.flatMap((variant) => variant.slots ?? []))];
+        if (union.length || unit.type === "emote") return union;
+    }
+    return DEFAULT_SLOTS[unit.type as CosmeticType] ?? [];
+}
+
 /** Uploads one more variant into an existing group. */
 function AddVariantForm({ unit }: { unit: CosmeticUnit }) {
     const [label, setLabel] = useState("");
     const [model, setModel] = useState("");
+    const [variantKey, setVariantKey] = useState("");
+    const [reuse, setReuse] = useState("");
+    const [cover, setCover] = useState<File | null>(null);
     const [picked, setPicked] = useState<Picked>(NOTHING);
+    const [outcome, setOutcome] = useState<UploadOutcome | null>(null);
+    const [localError, setLocalError] = useState<Error | null>(null);
     const create = useCreateCosmetic();
+    const isNameplate = unit.type === "nameplate";
+    const skinned = !isNameplate && unit.type !== "effect";
+    const report = useBundleReport(unit.type, reuse ? NOTHING : picked);
+    const problems = [
+        ...(reuse ? [] : reportProblems(report)),
+        ...variantKeyProblems(
+            unit.type,
+            variantKey,
+            reportKeys(report),
+            unit.variants.map((variant) => variant.variant_key),
+        ),
+    ];
+    const needsCover = needsDashboardCover(unit.type, !reuse && reportManifest(report));
+    const fileReady = reuse
+        ? true
+        : picked.files.length > 0 && report !== null && report !== "busy" && !reportInvalid(report);
+    const coverSource = reuse ? (unit.variants.find((variant) => variant.id === Number(reuse))?.url ?? null) : picked.files;
+    const auto = useAutoCover(
+        needsCover && !cover && fileReady && problems.length === 0 && coverSource
+            ? { source: coverSource, type: unit.type, variantKey: variantKey.trim() || null }
+            : null,
+    );
+    const sentCover = cover ?? auto.file;
 
     const submit = async (event: React.FormEvent) => {
         event.preventDefault();
-        const form = new FormData();
-        await appendFile(form, picked);
-        form.append("type", unit.type);
-        form.append("name", unit.name);
-        form.append("group", unit.name);
-        form.append("variant_name", label.trim());
-        form.append("variant_order", String(Math.max(...unit.variants.map((v) => v.variant_order)) + 1));
-        if (model) form.append("model_variant", model);
-        // The catalogue doesn't report the group's slots; defaults are merged in.
-        for (const slot of DEFAULT_SLOTS[unit.type as CosmeticType] ?? []) form.append("slots", slot);
-        create.mutate(form, {
-            onSuccess: () => {
-                setLabel("");
-                setModel("");
-                setPicked(NOTHING);
-            },
-        });
+        setLocalError(null);
+        try {
+            const file = reuse ? null : await prepareChecked(unit.type, picked);
+            const form = buildCreateForm(
+                {
+                    type: unit.type,
+                    name: unit.name,
+                    group: unit.name,
+                    variantName: label,
+                    variantOrder: Math.max(...unit.variants.map((v) => v.variant_order)) + 1,
+                    modelVariant: model,
+                    variantKey,
+                    assetFrom: reuse ? Number(reuse) : undefined,
+                    slots: groupSlots(unit),
+                },
+                file,
+                sentCover ? { blob: sentCover, name: sentCover.name } : null,
+            );
+            create.mutate(form, {
+                onSuccess: (data) => {
+                    setOutcome(parseUploadOutcome(data));
+                    setLabel("");
+                    setModel("");
+                    setVariantKey("");
+                    setReuse("");
+                    setCover(null);
+                    setPicked(NOTHING);
+                },
+            });
+        } catch (error) {
+            setLocalError(error as Error);
+        }
     };
 
     return (
@@ -795,20 +1629,59 @@ function AddVariantForm({ unit }: { unit: CosmeticUnit }) {
                 <Field label="Variant label">
                     <input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Green" className={inputClass} />
                 </Field>
-                <Field label="Skin model">
-                    <select value={model} onChange={(event) => setModel(event.target.value)} className={inputClass}>
-                        <option value="">Any</option>
-                        <option value="slim">Slim only</option>
-                        <option value="wide">Wide only</option>
+                <VariantKeyField
+                    type={unit.type}
+                    value={variantKey}
+                    onChange={setVariantKey}
+                    suggestions={keySuggestions(reportKeys(report), report)}
+                />
+                {skinned && (
+                    <Field label="Skin model">
+                        <select value={model} onChange={(event) => setModel(event.target.value)} className={inputClass}>
+                            <option value="">Any</option>
+                            <option value="slim">Slim only</option>
+                            <option value="wide">Wide only</option>
+                        </select>
+                    </Field>
+                )}
+            </div>
+            {isNameplate && (
+                <Field label="File" help="Variants that share a file each pick a different variant from its manifest.">
+                    <select value={reuse} onChange={(event) => setReuse(event.target.value)} className={inputClass}>
+                        <option value="">Upload a new file</option>
+                        {unit.variants.map((variant) => (
+                            <option key={variant.id} value={variant.id}>
+                                Same file as {variantLabel(variant)}
+                            </option>
+                        ))}
                     </select>
                 </Field>
-            </div>
-            <FilePicker picked={picked} onChange={setPicked} />
-            <ErrorBanner error={create.error} />
+            )}
+            {!reuse && <FilePicker picked={picked} onChange={setPicked} />}
+            <BundleNotes report={reuse ? null : report} problems={problems} keys={reportKeys(report)} />
+            {needsCover ? (
+                <AutoCoverPicker manual={cover} auto={auto} onChange={setCover} />
+            ) : (
+                <CoverPicker file={cover} onChange={setCover} optional />
+            )}
+            <ProblemBanner error={localError ?? create.error} />
             {create.isSuccess && <p className="text-sm text-green-300">Variant added.</p>}
-            <button type="submit" disabled={!label.trim() || !picked.files.length || create.isPending} className={secondaryButton}>
+            <OutcomeNotes outcome={outcome} />
+            <button
+                type="submit"
+                disabled={
+                    !label.trim() ||
+                    (!reuse && !picked.files.length) ||
+                    report === "busy" ||
+                    (!reuse && reportInvalid(report)) ||
+                    problems.length > 0 ||
+                    auto.busy ||
+                    create.isPending
+                }
+                className={secondaryButton}
+            >
                 <Upload size={16} />
-                {create.isPending ? "Uploading…" : "Upload variant"}
+                {create.isPending ? "Uploading…" : auto.busy ? "Making a cover…" : "Upload variant"}
             </button>
         </form>
     );
@@ -818,16 +1691,22 @@ function UnitPreview({ unit }: { unit: CosmeticUnit }) {
     const [variantId, setVariantId] = useState(unit.first.id);
     const variant = unit.variants.find((v) => v.id === variantId) ?? unit.first;
     const [coverSeconds, setCoverSeconds] = useState<number | null>(null);
-
-    const render = useAdminMutation<void>(() => ({
-        method: "POST",
-        path: "/cosmetics/manage/render-cover",
-        body: {
-            cosmetic_id: variant.id,
-            force: true,
-            ...(coverSeconds !== null && { cover_seconds: coverSeconds }),
-        },
-    }));
+    const [colorways, setColorways] = useState<string[]>([]);
+    const [captured, setCaptured] = useState<{ id: number; file: File } | null>(null);
+    const [captureProblems, setCaptureProblems] = useState<string[]>([]);
+    const renders = coverMode(unit.type) === "render";
+    const key = variant.variant_key ?? null;
+    const makeCover = useCoverMaker();
+    const [remake, setRemake] = useState<{ id: number; state: "busy" | CoverMade | Error } | null>(null);
+    const remakeState = remake?.id === variant.id ? remake.state : null;
+    const regenerate = () => {
+        const id = variant.id;
+        setRemake({ id, state: "busy" });
+        makeCover(variant, renders ? coverSeconds : null).then(
+            (made) => setRemake({ id, state: made }),
+            (error: Error) => setRemake({ id, state: error }),
+        );
+    };
 
     return (
         <div className="flex flex-col gap-2">
@@ -837,6 +1716,7 @@ function UnitPreview({ unit }: { unit: CosmeticUnit }) {
                         <option key={v.id} value={v.id}>
                             {v.variant_name ?? `#${v.id}`}
                             {v.model_variant ? ` (${v.model_variant})` : ""}
+                            {v.variant_key ? ` · ${v.variant_key}` : ""}
                         </option>
                     ))}
                 </select>
@@ -846,9 +1726,17 @@ function UnitPreview({ unit }: { unit: CosmeticUnit }) {
             <CosmeticPreview
                 source={variant.url}
                 type={unit.type}
-                bodySlot={previewSlot(unit.type)}
-                frozenAt={coverSeconds}
+                bodySlot={variant.slots?.[0] ?? previewSlot(unit.type)}
+                frozenAt={renders ? coverSeconds : null}
+                variantKey={unit.type === "nameplate" ? key : null}
+                colorway={key && colorways.includes(key) ? key : undefined}
+                coverUrl={variant.cover_url}
+                onInfo={(info) => setColorways(info.colorways ?? [])}
+                onCoverBlob={(blob) =>
+                    void adoptCover(blob, (file) => setCaptured({ id: variant.id, file })).then(setCaptureProblems)
+                }
             />
+            {captureProblems.length > 0 && <ProblemList problems={captureProblems} />}
 
             <div className="mt-4 font-semibold text-gray-300">Cover</div>
             <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
@@ -869,12 +1757,60 @@ function UnitPreview({ unit }: { unit: CosmeticUnit }) {
                     <figcaption>{variant.preview_url ? "Animated preview" : "Doesn't move"}</figcaption>
                 </figure>
             </div>
-            <FramePicker value={coverSeconds} onChange={setCoverSeconds} />
-            <ErrorBanner error={render.error} />
-            {render.isSuccess && <p className="text-sm text-green-300">Cover re-rendered.</p>}
-            <button onClick={() => render.mutate()} disabled={render.isPending} className={secondaryButton}>
-                <RefreshCw size={16} className={render.isPending ? "animate-spin" : ""} />
-                {render.isPending ? "Rendering…" : "Regenerate cover"}
+            {renders && <FramePicker value={coverSeconds} onChange={setCoverSeconds} />}
+            {remakeState instanceof Error && <ProblemBanner error={remakeState} />}
+            {remakeState === "server" && <p className="text-sm text-green-300">Cover re-rendered.</p>}
+            {remakeState === "dashboard" && <p className="text-sm text-green-300">Cover made from the preview and uploaded.</p>}
+            <button onClick={regenerate} disabled={remakeState === "busy"} className={secondaryButton}>
+                <RefreshCw size={16} className={remakeState === "busy" ? "animate-spin" : ""} />
+                {remakeState === "busy" ? "Making the cover…" : "Regenerate cover"}
+            </button>
+            <span className="text-xs text-gray-600">
+                {renders
+                    ? "Bundles with a manifest.json get their cover made here from the preview, at a set frame."
+                    : `The server doesn't make ${unit.type} covers, so this makes one from the preview.`}{" "}
+                To use the frame you see, press Save as cover under the preview, or pick a PNG below.
+            </span>
+            <CoverUpload
+                key={variant.id}
+                cosmeticId={variant.id}
+                hasPreview={variant.preview_url !== null}
+                cover={captured?.id === variant.id ? captured.file : null}
+                onCoverChange={(file) => setCaptured(file ? { id: variant.id, file } : null)}
+            />
+        </div>
+    );
+}
+
+function CoverUpload({
+    cosmeticId,
+    hasPreview,
+    cover,
+    onCoverChange,
+}: {
+    cosmeticId: number;
+    hasPreview: boolean;
+    cover: File | null;
+    onCoverChange: (file: File | null) => void;
+}) {
+    const [clearPreview, setClearPreview] = useState(false);
+    const upload = useCoverUpload();
+
+    return (
+        <div className="mt-2 flex flex-col gap-2 border-t border-gray-700 pt-3">
+            <CoverPicker file={cover} onChange={onCoverChange} />
+            {hasPreview && (
+                <Toggle label="Also remove the animated preview" checked={clearPreview} onChange={setClearPreview} />
+            )}
+            <ProblemBanner error={upload.error} />
+            {upload.isSuccess && <p className="text-sm text-green-300">Cover uploaded.</p>}
+            <button
+                onClick={() => cover && upload.mutate({ id: cosmeticId, file: cover, clearPreview }, { onSuccess: () => onCoverChange(null) })}
+                disabled={!cover || upload.isPending}
+                className={secondaryButton}
+            >
+                <ImageUp size={16} />
+                {upload.isPending ? "Uploading…" : "Upload cover"}
             </button>
         </div>
     );
@@ -966,6 +1902,7 @@ function VariantsEditor({ unit }: { unit: CosmeticUnit }) {
                 <VariantForm
                     key={variant.id}
                     variant={variant}
+                    siblings={unit.variants}
                     grouped={unit.group_id !== null}
                 />
             ))}
@@ -975,52 +1912,121 @@ function VariantsEditor({ unit }: { unit: CosmeticUnit }) {
 
 function VariantForm({
     variant,
+    siblings,
     grouped,
 }: {
     variant: CatalogCosmetic;
+    siblings: CatalogCosmetic[];
     grouped: boolean;
 }) {
     const [label, setLabel] = useState(variant.variant_name ?? "");
     const [model, setModel] = useState(variant.model_variant ?? "");
     const [order, setOrder] = useState(String(variant.variant_order));
+    const [variantKey, setVariantKey] = useState(variant.variant_key ?? "");
+    const knownSlots = variant.slots !== undefined;
     // The catalogue doesn't report slots, so they're only sent when picked.
-    const [slots, setSlots] = useState<string[]>([]);
-    const [file, setFile] = useState<File | null>(null);
-    const [fileKey, setFileKey] = useState(0);
+    const [slots, setSlots] = useState<string[]>(variant.slots ?? []);
+    const [picked, setPicked] = useState<Picked>(NOTHING);
+    const [outcome, setOutcome] = useState<UploadOutcome | null>(null);
+    const [localError, setLocalError] = useState<Error | null>(null);
+    const report = useBundleReport(variant.type, picked);
 
-    const body = {
-        cosmetic_id: variant.id,
-        ...(label !== (variant.variant_name ?? "") && {
-            variant_name: label.trim() || null,
-        }),
-        ...(model !== (variant.model_variant ?? "") && {
-            model_variant: model || null,
-        }),
-        ...(Number(order) !== variant.variant_order && {
-            variant_order: Number(order),
-        }),
-        ...(slots.length > 0 && { slots }),
-    };
+    const showKey = needsVariantKey(variant.type, grouped);
+    const skinned = variant.type !== "nameplate" && variant.type !== "effect";
+    const shared = sharedAssetVariants(siblings, variant);
+    const slotError = slots.length || knownSlots ? validateSlots(variant.type, slots) : null;
+    const keyProblems = showKey
+        ? variantKeyProblems(
+              variant.type,
+              variantKey,
+              [],
+              siblings.filter((other) => other.id !== variant.id).map((other) => other.variant_key),
+          )
+        : [];
+
+    const missingKeys =
+        variant.type === "nameplate" && reportKeys(report).length
+            ? [variant, ...shared]
+                  .map((other) => other.variant_key)
+                  .filter((key): key is string => !!key && !reportKeys(report).includes(key))
+            : [];
+    const replaceProblems = [
+        ...reportProblems(report),
+        ...(missingKeys.length
+            ? [`The new bundle has no variant ${missingKeys.map((key) => `“${key}”`).join(", ")}. Every variant using this file needs its key in the new one.`]
+            : []),
+    ];
+
+    const body = buildVariantUpdate(variant, {
+        variantName: label,
+        modelVariant: model,
+        variantOrder: Number(order),
+        variantKey: showKey ? variantKey : undefined,
+        slots,
+    });
 
     const save = useAdminMutation<void>(() => ({
         method: "POST",
         path: "/cosmetics/manage/update-variant",
         body,
     }));
-    const replace = useAdminMutation<File>((picked) => {
-        const form = new FormData();
-        form.append("cosmetic_id", String(variant.id));
-        form.append("file", picked, picked.name);
-        return { method: "POST", path: "/cosmetics/manage/replace-asset", body: form };
-    });
+    const replace = useAdminMutation<NamedBlob>((file) => ({
+        method: "POST",
+        path: "/cosmetics/manage/replace-asset",
+        body: buildReplaceForm(variant.id, file),
+    }));
+    const uploadCover = useCoverUpload();
+    const [covers, setCovers] = useState<{ busy: boolean; made: number; failed: string[] } | null>(null);
+    const coversFromFile = needsDashboardCover(variant.type, reportManifest(report));
+
+    const remakeCovers = async (source: File[]) => {
+        const targets = variant.type === "nameplate" ? [variant, ...shared] : [variant];
+        const failed: string[] = [];
+        let made = 0;
+        setCovers({ busy: true, made, failed });
+        for (const target of targets) {
+            try {
+                const file = await makeCoverFile({ source, type: variant.type, variantKey: target.variant_key ?? null });
+                await uploadCover.mutateAsync({ id: target.id, file });
+                made++;
+            } catch (error) {
+                failed.push(`${variantLabel(target)}: ${(error as Error).message}`);
+            }
+        }
+        setCovers({ busy: false, made, failed });
+    };
+
+    const submitReplace = async () => {
+        setLocalError(null);
+        setCovers(null);
+        try {
+            const file = await prepareChecked(variant.type, picked);
+            const source = picked.files;
+            const remake = coversFromFile;
+            replace.mutate(file, {
+                onSuccess: (data) => {
+                    setOutcome(parseUploadOutcome(data));
+                    setPicked(NOTHING);
+                    if (remake) void remakeCovers(source);
+                },
+            });
+        } catch (error) {
+            setLocalError(error as Error);
+        }
+    };
+
+    const replaceHelp = !coversFromFile
+        ? "A new model, texture or emote bundle; the cover re-renders from it"
+        : "A new bundle. A new cover is made from it here once it's uploaded.";
 
     return (
         <div className="flex flex-col gap-3 rounded border border-gray-700 p-3">
-            <div className="flex items-center gap-2 text-sm text-gray-400">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-gray-400">
                 <span className="text-gray-200">
                     {variant.variant_name ?? variant.name ?? `Cosmetic ${variant.id}`}
                 </span>
                 <span className="font-mono text-xs">#{variant.id}</span>
+                {variant.variant_key && <Badge tone="blue">{variant.variant_key}</Badge>}
                 {variant.url && (
                     <a
                         href={variant.url}
@@ -1032,10 +2038,23 @@ function VariantForm({
                     </a>
                 )}
             </div>
+            {(shared.length > 0 || (variant.color_slots?.length ?? 0) > 0) && (
+                <div className="flex flex-col gap-1 text-xs text-gray-500">
+                    {shared.length > 0 && <span>Shares its file with {shared.map(variantLabel).join(", ")}.</span>}
+                    {variant.color_slots && variant.color_slots.length > 0 && (
+                        <span>
+                            Color slots:{" "}
+                            {variant.color_slots
+                                .map((slot) => slot.name)
+                                .join(", ")}
+                        </span>
+                    )}
+                </div>
+            )}
             <form
                 onSubmit={(event) => {
                     event.preventDefault();
-                    save.mutate(undefined, { onSuccess: () => setSlots([]) });
+                    save.mutate(undefined, { onSuccess: () => !knownSlots && setSlots([]) });
                 }}
                 className="flex flex-col gap-3"
             >
@@ -1050,20 +2069,31 @@ function VariantForm({
                             />
                         </Field>
                     )}
-                    <Field
-                        label="Skin model"
-                        help="Re-render the cover after changing this"
-                    >
-                        <select
-                            value={model}
-                            onChange={(event) => setModel(event.target.value)}
-                            className={inputClass}
+                    {showKey && (
+                        <VariantKeyField
+                            type={variant.type}
+                            value={variantKey}
+                            onChange={setVariantKey}
+                            suggestions={keySuggestions(reportKeys(report), report)}
+                            unknown={variant.variant_key === undefined}
+                        />
+                    )}
+                    {skinned && (
+                        <Field
+                            label="Skin model"
+                            help="Re-render the cover after changing this"
                         >
-                            <option value="">Any</option>
-                            <option value="slim">Slim</option>
-                            <option value="wide">Wide</option>
-                        </select>
-                    </Field>
+                            <select
+                                value={model}
+                                onChange={(event) => setModel(event.target.value)}
+                                className={inputClass}
+                            >
+                                <option value="">Any</option>
+                                <option value="slim">Slim</option>
+                                <option value="wide">Wide</option>
+                            </select>
+                        </Field>
+                    )}
                     {grouped && (
                         <Field label="Order">
                             <input
@@ -1077,64 +2107,77 @@ function VariantForm({
                         </Field>
                     )}
                 </div>
-                <Field
-                    label="Replace body slots"
-                    help="Leave empty to keep the current slots. Players wearing it in a removed slot are unequipped."
-                >
-                    <CheckList
-                        items={BODY_SLOTS.map((slot) => ({ id: slot, label: slot }))}
-                        selected={slots}
-                        onChange={setSlots}
-                    />
-                </Field>
-                <ErrorBanner error={save.error} />
+                {variant.type !== "emote" && (
+                    <Field
+                        label={knownSlots ? "Body slots" : "Replace body slots"}
+                        help={
+                            knownSlots
+                                ? "Players wearing it in a removed slot are unequipped."
+                                : "Leave empty to keep the current slots. Players wearing it in a removed slot are unequipped."
+                        }
+                    >
+                        <CheckList items={slotItems(variant.type)} selected={slots} onChange={setSlots} />
+                    </Field>
+                )}
+                {slotError && <p className="text-sm text-red-300">{slotError}</p>}
+                {keyProblems.length > 0 && <ProblemList problems={keyProblems} />}
+                <ProblemBanner error={save.error} />
                 {save.isSuccess && <p className="text-sm text-green-300">Saved.</p>}
                 <button
                     type="submit"
-                    disabled={Object.keys(body).length === 1 || save.isPending}
+                    disabled={Object.keys(body).length === 1 || slotError !== null || keyProblems.length > 0 || save.isPending}
                     className={secondaryButton}
                 >
                     <Save size={16} />
                     {save.isPending ? "Saving…" : "Save variant"}
                 </button>
             </form>
-            <form
-                onSubmit={(event) => {
-                    event.preventDefault();
-                    if (!file) return;
-                    replace.mutate(file, {
-                        onSuccess: () => {
-                            setFile(null);
-                            setFileKey(fileKey + 1);
-                        },
-                    });
-                }}
-                className="flex flex-wrap items-end gap-3"
-            >
-                <Field
-                    label="Replace file"
-                    help="A new model, texture or emote bundle; the cover re-renders from it"
-                >
-                    <input
-                        key={fileKey}
-                        type="file"
-                        onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                        className={inputClass}
-                    />
-                </Field>
+            <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1 text-sm text-gray-400">
+                    Replace file
+                    <FilePicker picked={picked} onChange={setPicked} />
+                    <span className="text-xs text-gray-600">{replaceHelp}</span>
+                </div>
+                {variant.type === "nameplate" && (
+                    <p className="text-xs text-amber-300">
+                        {shared.length
+                            ? `${shared.map(variantLabel).join(", ")} use${shared.length === 1 ? "s" : ""} this file too and will move to the new one.`
+                            : "Every variant that uses this file moves to the new one."}{" "}
+                        Each of their keys has to exist in the new bundle.
+                    </p>
+                )}
+                <BundleNotes report={report} problems={replaceProblems} keys={reportKeys(report)} />
                 <button
-                    type="submit"
-                    disabled={!file || replace.isPending}
-                    className={secondaryButton}
+                    type="button"
+                    onClick={() => void submitReplace()}
+                    disabled={
+                        !picked.files.length ||
+                        report === "busy" ||
+                        reportInvalid(report) ||
+                        replaceProblems.length > 0 ||
+                        replace.isPending
+                    }
+                    className={`${secondaryButton} self-start`}
                 >
                     <ImageUp size={16} />
                     {replace.isPending ? "Uploading…" : "Upload"}
                 </button>
-            </form>
-            <ErrorBanner error={replace.error} />
+            </div>
+            <ProblemBanner error={localError ?? replace.error} />
             {replace.isSuccess && (
                 <p className="text-sm text-green-300">File replaced.</p>
             )}
+            {covers?.busy && <p className="text-sm text-gray-400">Making a new cover from the file…</p>}
+            {covers && !covers.busy && covers.made > 0 && (
+                <p className="text-sm text-green-300">
+                    New cover{covers.made === 1 ? "" : "s"} made from the file. Change {covers.made === 1 ? "it" : "them"} under
+                    Cover if needed.
+                </p>
+            )}
+            {covers && !covers.busy && covers.failed.length > 0 && (
+                <ProblemList problems={covers.failed.map((line) => `Couldn't make a cover for ${line}`)} />
+            )}
+            <OutcomeNotes outcome={outcome} />
         </div>
     );
 }

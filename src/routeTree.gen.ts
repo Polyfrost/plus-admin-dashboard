@@ -12,7 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TokensRouteImport } from './routes/tokens'
 import { Route as StoreRouteImport } from './routes/store'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SetsRouteImport } from './routes/sets'
 import { Route as RolesRouteImport } from './routes/roles'
+import { Route as PlayersRouteImport } from './routes/players'
 import { Route as LinksRouteImport } from './routes/links'
 import { Route as LinkingRouteImport } from './routes/linking'
 import { Route as EventsRouteImport } from './routes/events'
@@ -36,9 +38,19 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SetsRoute = SetsRouteImport.update({
+  id: '/sets',
+  path: '/sets',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RolesRoute = RolesRouteImport.update({
   id: '/roles',
   path: '/roles',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlayersRoute = PlayersRouteImport.update({
+  id: '/players',
+  path: '/players',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LinksRoute = LinksRouteImport.update({
@@ -85,7 +97,9 @@ export interface FileRoutesByFullPath {
   '/events': typeof EventsRoute
   '/linking': typeof LinkingRoute
   '/links': typeof LinksRoute
+  '/players': typeof PlayersRoute
   '/roles': typeof RolesRoute
+  '/sets': typeof SetsRoute
   '/settings': typeof SettingsRoute
   '/store': typeof StoreRoute
   '/tokens': typeof TokensRoute
@@ -98,7 +112,9 @@ export interface FileRoutesByTo {
   '/events': typeof EventsRoute
   '/linking': typeof LinkingRoute
   '/links': typeof LinksRoute
+  '/players': typeof PlayersRoute
   '/roles': typeof RolesRoute
+  '/sets': typeof SetsRoute
   '/settings': typeof SettingsRoute
   '/store': typeof StoreRoute
   '/tokens': typeof TokensRoute
@@ -112,7 +128,9 @@ export interface FileRoutesById {
   '/events': typeof EventsRoute
   '/linking': typeof LinkingRoute
   '/links': typeof LinksRoute
+  '/players': typeof PlayersRoute
   '/roles': typeof RolesRoute
+  '/sets': typeof SetsRoute
   '/settings': typeof SettingsRoute
   '/store': typeof StoreRoute
   '/tokens': typeof TokensRoute
@@ -127,7 +145,9 @@ export interface FileRouteTypes {
     | '/events'
     | '/linking'
     | '/links'
+    | '/players'
     | '/roles'
+    | '/sets'
     | '/settings'
     | '/store'
     | '/tokens'
@@ -140,7 +160,9 @@ export interface FileRouteTypes {
     | '/events'
     | '/linking'
     | '/links'
+    | '/players'
     | '/roles'
+    | '/sets'
     | '/settings'
     | '/store'
     | '/tokens'
@@ -153,7 +175,9 @@ export interface FileRouteTypes {
     | '/events'
     | '/linking'
     | '/links'
+    | '/players'
     | '/roles'
+    | '/sets'
     | '/settings'
     | '/store'
     | '/tokens'
@@ -167,7 +191,9 @@ export interface RootRouteChildren {
   EventsRoute: typeof EventsRoute
   LinkingRoute: typeof LinkingRoute
   LinksRoute: typeof LinksRoute
+  PlayersRoute: typeof PlayersRoute
   RolesRoute: typeof RolesRoute
+  SetsRoute: typeof SetsRoute
   SettingsRoute: typeof SettingsRoute
   StoreRoute: typeof StoreRoute
   TokensRoute: typeof TokensRoute
@@ -196,11 +222,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sets': {
+      id: '/sets'
+      path: '/sets'
+      fullPath: '/sets'
+      preLoaderRoute: typeof SetsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/roles': {
       id: '/roles'
       path: '/roles'
       fullPath: '/roles'
       preLoaderRoute: typeof RolesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/players': {
+      id: '/players'
+      path: '/players'
+      fullPath: '/players'
+      preLoaderRoute: typeof PlayersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/links': {
@@ -263,7 +303,9 @@ const rootRouteChildren: RootRouteChildren = {
   EventsRoute: EventsRoute,
   LinkingRoute: LinkingRoute,
   LinksRoute: LinksRoute,
+  PlayersRoute: PlayersRoute,
   RolesRoute: RolesRoute,
+  SetsRoute: SetsRoute,
   SettingsRoute: SettingsRoute,
   StoreRoute: StoreRoute,
   TokensRoute: TokensRoute,
