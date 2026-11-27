@@ -289,7 +289,6 @@ function ProfileTable({
     );
 }
 
-/** Matches the file to its table row; the ID suffix keeps names unique. */
 function profileFilename(profile: PerfProfile): string {
     const name = [
         profile.created_at.slice(0, 19),
@@ -307,7 +306,6 @@ function ProfileDownload({
 }: {
     env: string;
     profile: PerfProfile;
-    /** Rows may still belong to the previous env while a refetch runs. */
     stale: boolean;
 }) {
     const [state, setState] = useState<"idle" | "busy" | "failed">("idle");
